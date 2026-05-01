@@ -8,7 +8,7 @@ type ActionState =
   | null;
 
 type FeatureActionFormProps = {
-  action: (prevState: ActionState, formData: FormData) => Promise<ActionState>;
+  action: (formData: FormData) => Promise<any>;
   children: React.ReactNode;
   submitLabel?: string;
   successMessage?: string;
@@ -22,7 +22,24 @@ export default function FeatureActionForm({
   submitLabel = 'Save',
   successMessage = 'Saved successfully.',
 }: FeatureActionFormProps) {
-  const [state, formAction, pending] = useActionState(action, initialState);
+  async function formActionWrapper(
+    _prevState: ActionState,
+    formData: FormData
+  ): Promise<ActionState> {
+    const result = await action(formData);
+
+    if (result?.error) {
+      return { error: String(result.error) };
+    }
+
+    return { success: true };
+  }
+
+  const [state, formAction, pending] = useActionState(
+    formActionWrapper,
+    initialState
+  );
+
   const [message, setMessage] = useState<{
     type: 'success' | 'error';
     text: string;
