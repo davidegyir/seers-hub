@@ -3,12 +3,33 @@ import { redirect } from 'next/navigation';
 import { sql } from '@/lib/db';
 import { startCheckout } from './actions';
 
-export default async function PaymentsPage() {
+type SearchParams = Promise<{
+  product?: string;
+}>;
+
+function formatPrice(currency: string, price: string | number) {
+  const amount = Number(price);
+
+  if (currency === 'GHS') {
+    return `GHS ${amount.toFixed(2)}`;
+  }
+
+  return `${currency} ${amount.toFixed(2)}`;
+}
+
+export default async function PaymentsPage({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
   const { userId } = await auth();
 
   if (!userId) {
     redirect('/sign-in');
   }
+
+  const params = await searchParams;
+  const productKey = params.product;
 
   const userRows = await sql`
     SELECT status
@@ -27,55 +48,133 @@ export default async function PaymentsPage() {
     redirect('/suspended');
   }
 
-  const products = await sql`
-    SELECT id, name, description, price, currency
-    FROM products
-    WHERE is_active = true
-    ORDER BY name ASC
-  `;
+  const products = productKey
+    ? await sql`
+        SELECT id, product_key, name, description, price, currency
+        FROM products
+        WHERE is_active = true
+          AND product_key = ${productKey}
+        ORDER BY name ASC
+      `
+    : await sql`
+        SELECT id, product_key, name, description, price, currency
+        FROM products
+        WHERE is_active = true
+        ORDER BY name ASC
+      `;
 
   return (
-    <main style={{ padding: '2rem' }}>
-      <h1>Payments</h1>
-      <p>Choose a product and start checkout.</p>
+    <main
+      style={{
+        minHeight: '100vh',
+        padding: '2rem',
+        background: '#f8fafc',
+        fontFamily: 'Arial, sans-serif',
+      }}
+    >
+      <div style={{ maxWidth: '760px', margin: '0 auto' }}>
+        <h1 style={{ marginTop: 0, color: '#111827' }}>Payment</h1>
 
-      <div style={{ display: 'grid', gap: '1rem', marginTop: '1.5rem' }}>
-        {products.map((product: any) => (
+        <p style={{ color: '#4b5563', marginBottom: '1.5rem' }}>
+          Confirm your selection and continue to the available payment options.
+        </p>
+
+        {products.length === 0 ? (
           <div
-            key={product.id}
             style={{
               background: 'white',
               border: '1px solid #e5e7eb',
               borderRadius: '12px',
-              padding: '1rem',
+              padding: '1.5rem',
             }}
           >
-            <h2 style={{ marginTop: 0 }}>{product.name}</h2>
-            <p>{product.description || '—'}</p>
-            <p>
-              <strong>
-                {product.currency} {product.price}
-              </strong>
+            <h2 style={{ marginTop: 0 }}>Product not found</h2>
+            <p style={{ color: '#4b5563' }}>
+              The selected product is unavailable or inactive.
             </p>
-
-            <form action={startCheckout}>
-              <input type="hidden" name="productId" value={product.id} />
-              <button
-                type="submit"
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gap: '1rem' }}>
+            {products.map((product: any) => (
+              <div
+                key={product.id}
                 style={{
-                  padding: '0.65rem 1rem',
-                  borderRadius: '8px',
-                  border: 'none',
-                  background: '#111827',
-                  color: 'white',
-                  cursor: 'pointer',
+                  background: 'white',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: '16px',
+                  padding: '1.5rem',
+                  boxShadow: '0 10px 25px rgba(15, 23, 42, 0.06)',
                 }}
               >
-                Pay with Flutterwave
-              </button>
-            </form>
+                <p
+                  style={{
+                    margin: 0,
+                    marginBottom: '0.5rem',
+                    fontSize: '0.85rem',
+                    color: '#2563eb',
+                    fontWeight: 700,
+                    letterSpacing: '0.04em',
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  Seers Academy
+                </p>
+
+                <h2
+                  style={{
+                    marginTop: 0,
+                    marginBottom: '0.75rem',
+                    color: '#111827',
+                    fontSize: '1.6rem',
+                  }}
+                >
+                  {product.name}
+                </h2>
+
+                <p
+                  style={{
+                    color: '#4b5563',
+                    lineHeight: 1.6,
+                    marginBottom: '1.25rem',
+                  }}
+                >
+                  {product.description || 'No description available.'}
+                </p>
+
+                <p
+                  style={{
+                    fontSize: '1.5rem',
+                    fontWeight: 800,
+                    color: '#111827',
+                    marginBottom: '1.5rem',
+                  }}
+                >
+                  {formatPrice(product.currency, product.price)}
+                </p>
+
+                <form action={startCheckout}>
+                  <input type="hidden" name="productId" value={product.id} />
+
+                  <button
+                    type="submit"
+                    style={{
+                      padding: '0.8rem 1.15rem',
+                      borderRadius: '10px',
+                      border: 'none',
+                      background: '#111827',
+                      color: 'white',
+                      cursor: 'pointer',
+                      fontWeight: 700,
+                      fontSize: '1rem',
+                    }}
+                  >
+                    Payment Options
+                  </button>
+                </form>
+              </div>
+            ))}
           </div>
-        ))}
+        )}
       </div>
     </main>
   );
