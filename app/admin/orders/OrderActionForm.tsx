@@ -2,22 +2,42 @@
 
 import { useActionState, useEffect, useState } from 'react';
 
-type ActionResult =
-  | { success: true }
-  | { error: string }
-  | undefined;
+type ActionState =
+  | { success: true; error?: never }
+  | { error: string; success?: never }
+  | null;
 
-type Props = {
-  action: (formData: FormData) => Promise<ActionResult>;
+type OrderActionFormProps = {
+  action: (formData: FormData) => Promise<any>;
   children: React.ReactNode;
+  submitLabel?: string;
+  successMessage?: string;
 };
 
-export default function OrderActionForm({ action, children }: Props) {
-  const [state, formAction, pending] = useActionState<ActionResult, FormData>(
-    async (_prevState, formData) => {
-      return await action(formData);
-    },
-    undefined
+const initialState: ActionState = null;
+
+export default function OrderActionForm({
+  action,
+  children,
+  submitLabel = 'Save',
+  successMessage = 'Saved successfully.',
+}: OrderActionFormProps) {
+  async function formActionWrapper(
+    _prevState: ActionState,
+    formData: FormData
+  ): Promise<ActionState> {
+    const result = await action(formData);
+
+    if (result?.error) {
+      return { error: String(result.error) };
+    }
+
+    return { success: true };
+  }
+
+  const [state, formAction, pending] = useActionState(
+    formActionWrapper,
+    initialState
   );
 
   const [message, setMessage] = useState<{
@@ -26,44 +46,41 @@ export default function OrderActionForm({ action, children }: Props) {
   } | null>(null);
 
   useEffect(() => {
-    if (state?.error) {
+    if (!state) return;
+
+    if ('error' in state && state.error) {
       setMessage({ type: 'error', text: state.error });
       return;
     }
 
-    if (state?.success) {
-      setMessage({ type: 'success', text: 'Saved successfully.' });
+    if ('success' in state && state.success) {
+      setMessage({ type: 'success', text: successMessage });
     }
-  }, [state]);
+  }, [state, successMessage]);
 
   return (
-    <div>
-      <form action={formAction}>{children}</form>
+    <form action={formAction} className="space-y-3">
+      {children}
+
+      <button
+        type="submit"
+        disabled={pending}
+        className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        {pending ? 'Saving...' : submitLabel}
+      </button>
 
       {message && (
-        <div
-          style={{
-            marginTop: '0.45rem',
-            fontSize: '0.82rem',
-            lineHeight: 1.35,
-            color: message.type === 'error' ? '#b91c1c' : '#166534',
-          }}
+        <p
+          className={
+            message.type === 'error'
+              ? 'text-sm text-red-600'
+              : 'text-sm text-green-600'
+          }
         >
           {message.text}
-        </div>
+        </p>
       )}
-
-      {pending && (
-        <div
-          style={{
-            marginTop: '0.45rem',
-            fontSize: '0.82rem',
-            color: '#6b7280',
-          }}
-        >
-          Saving...
-        </div>
-      )}
-    </div>
+    </form>
   );
 }
