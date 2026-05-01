@@ -1,60 +1,30 @@
-import { auth } from '@clerk/nextjs/server';
-import { sql } from '@/lib/db';
 import { UserButton } from '@clerk/nextjs';
 
-export default async function AdminHeader() {
-  const { userId } = await auth();
+type AdminHeaderProps = {
+  email?: string | null;
+  role?: string | null;
+};
 
-  if (!userId) {
-    return null;
-  }
-
-  const dbUser = await sql`
-    SELECT email, full_name, role
-    FROM users
-    WHERE clerk_user_id = ${userId}
-    LIMIT 1
-  `;
-
-  const savedUser = dbUser[0];
-
-  if (!savedUser) {
-    return null;
-  }
-
+export default function AdminHeader({ email, role }: AdminHeaderProps) {
   return (
-    <header
-      style={{
-        background: 'white',
-        borderBottom: '1px solid #e5e7eb',
-        padding: '1rem 1.5rem',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: '1rem',
-      }}
-    >
+    <header className="flex items-center justify-between border-b border-gray-200 bg-white px-6 py-4">
       <div>
-        <strong>Seers Platform Admin</strong>
+        <h1 className="text-lg font-semibold text-gray-900">
+          Seers Platform Admin
+        </h1>
       </div>
 
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '1rem',
-        }}
-      >
-        <div style={{ textAlign: 'right' }}>
-          <div style={{ fontWeight: 600, color: '#111827' }}>
-            {savedUser.full_name || savedUser.email}
-          </div>
-          <div style={{ fontSize: '0.9rem', color: '#6b7280' }}>
-            {savedUser.email} · {savedUser.role}
-          </div>
+      <div className="flex items-center gap-3 text-right">
+        <div>
+          <p className="text-sm font-semibold text-gray-900">
+            {email || 'Unknown user'}
+          </p>
+          <p className="text-xs text-gray-500">
+            {email || 'No email'} · {role || 'user'}
+          </p>
         </div>
 
-        <UserButton afterSignOutUrl="/sign-in" />
+        <UserButton />
       </div>
     </header>
   );
