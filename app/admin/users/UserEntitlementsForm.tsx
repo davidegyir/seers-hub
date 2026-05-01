@@ -2,29 +2,58 @@
 
 import { useActionState, useEffect, useState } from 'react';
 
-type ActionResult =
-  | { success: true }
-  | { error: string }
-  | undefined;
+type ActionState =
+  | { success: true; error?: never }
+  | { error: string; success?: never }
+  | null;
 
-type Props = {
-  action: (formData: FormData) => Promise<ActionResult>;
-  userId: string;
-  selectedFeatures: string[];
-  allFeatures: string[];
+type Feature = {
+  key?: string;
+  slug?: string;
+  name?: string;
+  label?: string;
 };
+
+type UserEntitlementsFormProps = {
+  action: (formData: FormData) => Promise<any>;
+  userId?: string;
+  features?: Feature[];
+  entitlements?: string[];
+  currentEntitlements?: string[];
+  children?: React.ReactNode;
+  buttonLabel?: string;
+  successMessage?: string;
+  [key: string]: any;
+};
+
+const initialState: ActionState = null;
 
 export default function UserEntitlementsForm({
   action,
   userId,
-  selectedFeatures,
-  allFeatures,
-}: Props) {
-  const [state, formAction, pending] = useActionState<ActionResult, FormData>(
-    async (_prevState, formData) => {
-      return await action(formData);
-    },
-    undefined
+  features = [],
+  entitlements = [],
+  currentEntitlements = [],
+  children,
+  buttonLabel = 'Save',
+  successMessage = 'Saved successfully.',
+}: UserEntitlementsFormProps) {
+  async function formActionWrapper(
+    _prevState: ActionState,
+    formData: FormData
+  ): Promise<ActionState> {
+    const result = await action(formData);
+
+    if (result?.error) {
+      return { error: String(result.error) };
+    }
+
+    return { success: true };
+  }
+
+  const [state, formAction, pending] = useActionState(
+    formActionWrapper,
+    initialState
   );
 
   const [message, setMessage] = useState<{
@@ -33,78 +62,68 @@ export default function UserEntitlementsForm({
   } | null>(null);
 
   useEffect(() => {
-    if (state?.error) {
+    if (!state) return;
+
+    if ('error' in state && state.error) {
       setMessage({ type: 'error', text: state.error });
       return;
     }
 
-    if (state?.success) {
-      setMessage({ type: 'success', text: 'Saved successfully.' });
+    if ('success' in state && state.success) {
+      setMessage({ type: 'success', text: successMessage });
     }
-  }, [state]);
+  }, [state, successMessage]);
+
+  const granted = new Set([...entitlements, ...currentEntitlements]);
 
   return (
-    <div style={{ minWidth: '260px' }}>
-      <form action={formAction}>
-        <input type="hidden" name="targetUserId" value={userId} />
+    <form action={formAction} className="space-y-3">
+      {userId && <input type="hidden" name="targetUserId" value={userId} />}
 
-        <div
-          style={{
-            display: 'grid',
-            gap: '0.35rem',
-            marginBottom: '0.5rem',
-          }}
-        >
-          {allFeatures.map((feature) => (
-            <label
-              key={feature}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.45rem',
-                fontSize: '0.85rem',
-              }}
-            >
-              <input
-                type="checkbox"
-                name="features"
-                value={feature}
-                defaultChecked={selectedFeatures.includes(feature)}
-              />
-              <span>{feature}</span>
-            </label>
-          ))}
-        </div>
+      {features.length > 0 && (
+        <div className="space-y-2">
+          {features.map((feature) => {
+            const value = feature.key || feature.slug || feature.name || '';
+            const label = feature.label || feature.name || feature.key || value;
 
-        <button
-          type="submit"
-          disabled={pending}
-          style={{
-            padding: '0.4rem 0.75rem',
-            borderRadius: '6px',
-            border: 'none',
-            background: '#0f766e',
-            color: 'white',
-            cursor: pending ? 'not-allowed' : 'pointer',
-            opacity: pending ? 0.7 : 1,
-          }}
-        >
-          {pending ? 'Saving...' : 'Save'}
-        </button>
-      </form>
+            if (!value) return null;
 
-      {message && (
-        <div
-          style={{
-            marginTop: '0.45rem',
-            fontSize: '0.82rem',
-            lineHeight: 1.35,
-            color: message.type === 'error' ? '#b91c1c' : '#166534',
-          }}
-        >
-          {message.text}
+            return (
+              <label key={value} className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  name="entitlements"
+                  value={value}
+                  defaultChecked={granted.has(value)}
+                />
+                <span>{label}</span>
+              </label>
+            );
+          })}
         </div>
       )}
-    </div>
+
+      {children}
+
+      <button
+        type="submit"
+        disabled={pending}
+        className="rounded-md bg-emerald-700 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        {pending ? 'Saving...' : buttonLabel}
+      </button>
+
+      {message && (
+        <p
+          className={
+            message.type === 'error'
+              ? 'text-sm text-red-600'
+              : 'text-sm text-green-600'
+          }
+        >
+          {message.text}
+        </p>
+      )}
+    </form>
   );
 }
