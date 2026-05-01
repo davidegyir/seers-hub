@@ -2,42 +2,52 @@
 
 import { useActionState, useEffect, useState } from 'react';
 
-type ActionResult =
-  | { success: true }
-  | { error: string }
-  | undefined;
+type ActionState =
+  | { success: true; error?: never }
+  | { error: string; success?: never }
+  | null;
 
-type Option = {
-  value: string;
-  label: string;
+type UserActionFormProps = {
+  action: (formData: FormData) => Promise<any>;
+  children: React.ReactNode;
+  hiddenName?: string;
+  hiddenValue?: string;
+  selectName?: string;
+  selectDefaultValue?: string;
+  options?: string[];
+  buttonLabel?: string;
+  successMessage?: string;
 };
 
-type Props = {
-  action: (formData: FormData) => Promise<ActionResult>;
-  hiddenName: string;
-  hiddenValue: string;
-  selectName: string;
-  defaultValue: string;
-  options: Option[];
-  buttonLabel: string;
-  buttonColor: string;
-};
+const initialState: ActionState = null;
 
 export default function UserActionForm({
   action,
+  children,
   hiddenName,
   hiddenValue,
   selectName,
-  defaultValue,
+  selectDefaultValue,
   options,
-  buttonLabel,
-  buttonColor,
-}: Props) {
-  const [state, formAction, pending] = useActionState<ActionResult, FormData>(
-    async (_prevState, formData) => {
-      return await action(formData);
-    },
-    undefined
+  buttonLabel = 'Save',
+  successMessage = 'Saved successfully.',
+}: UserActionFormProps) {
+  async function formActionWrapper(
+    _prevState: ActionState,
+    formData: FormData
+  ): Promise<ActionState> {
+    const result = await action(formData);
+
+    if (result?.error) {
+      return { error: String(result.error) };
+    }
+
+    return { success: true };
+  }
+
+  const [state, formAction, pending] = useActionState(
+    formActionWrapper,
+    initialState
   );
 
   const [message, setMessage] = useState<{
@@ -46,74 +56,59 @@ export default function UserActionForm({
   } | null>(null);
 
   useEffect(() => {
-    if (state?.error) {
-      setMessage({
-        type: 'error',
-        text: state.error,
-      });
+    if (!state) return;
+
+    if ('error' in state && state.error) {
+      setMessage({ type: 'error', text: state.error });
       return;
     }
 
-    if (state?.success) {
-      setMessage({
-        type: 'success',
-        text: 'Saved successfully.',
-      });
+    if ('success' in state && state.success) {
+      setMessage({ type: 'success', text: successMessage });
     }
-  }, [state]);
+  }, [state, successMessage]);
 
   return (
-    <div style={{ minWidth: '220px' }}>
-      <form action={formAction} style={{ display: 'flex', gap: '0.5rem' }}>
+    <form action={formAction} className="space-y-2">
+      {hiddenName && hiddenValue && (
         <input type="hidden" name={hiddenName} value={hiddenValue} />
+      )}
 
+      {selectName && options && (
         <select
           name={selectName}
-          defaultValue={defaultValue}
-          style={{
-            padding: '0.4rem 0.5rem',
-            borderRadius: '6px',
-            border: '1px solid #d1d5db',
-            background: 'white',
-          }}
+          defaultValue={selectDefaultValue}
+          className="rounded-md border border-gray-300 px-3 py-2 text-sm"
         >
           {options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
+            <option key={option} value={option}>
+              {option}
             </option>
           ))}
         </select>
+      )}
 
-        <button
-          type="submit"
-          disabled={pending}
-          style={{
-            padding: '0.4rem 0.75rem',
-            borderRadius: '6px',
-            border: 'none',
-            background: buttonColor,
-            color: 'white',
-            cursor: pending ? 'not-allowed' : 'pointer',
-            opacity: pending ? 0.7 : 1,
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {pending ? 'Saving...' : buttonLabel}
-        </button>
-      </form>
+      {children}
+
+      <button
+        type="submit"
+        disabled={pending}
+        className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        {pending ? 'Saving...' : buttonLabel}
+      </button>
 
       {message && (
-        <div
-          style={{
-            marginTop: '0.45rem',
-            fontSize: '0.82rem',
-            lineHeight: 1.35,
-            color: message.type === 'error' ? '#b91c1c' : '#166534',
-          }}
+        <p
+          className={
+            message.type === 'error'
+              ? 'text-sm text-red-600'
+              : 'text-sm text-green-600'
+          }
         >
           {message.text}
-        </div>
+        </p>
       )}
-    </div>
+    </form>
   );
 }
