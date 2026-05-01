@@ -9,7 +9,7 @@ type ActionState =
 
 type UserActionFormProps = {
   action: (formData: FormData) => Promise<any>;
-  children: React.ReactNode;
+  children?: React.ReactNode;
   hiddenName?: string;
   hiddenValue?: string;
   selectName?: string;
