@@ -6,6 +6,26 @@ import { enrollUserInLearnDash } from '@/lib/learndash-bridge';
 
 export const dynamic = 'force-dynamic';
 
+const SAFE_AUTO_APPROVE_METHODS = new Set([
+  'card',
+  'mobilemoney',
+  'mobile_money',
+  'mobile money',
+  'momo',
+  'ussd',
+]);
+
+const UNSAFE_MANUAL_METHODS = new Set([
+  'bank',
+  'banktransfer',
+  'bank_transfer',
+  'bank transfer',
+  'bankdeposit',
+  'bank_deposit',
+  'bank deposit',
+  'account',
+]);
+
 function normalizePayload(rawText: string) {
   try {
     return JSON.parse(rawText);
@@ -19,6 +39,35 @@ function normalizePayload(rawText: string) {
 
     return asObject;
   }
+}
+
+function normalizePaymentMethod(value: unknown) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/-/g, '_');
+}
+
+function getPaymentMethod(verified: any) {
+  return normalizePaymentMethod(
+    verified?.payment_type ||
+      verified?.paymentType ||
+      verified?.payment_method ||
+      verified?.paymentMethod ||
+      verified?.data?.payment_type ||
+      verified?.data?.payment_method ||
+      verified?.meta?.payment_type
+  );
+}
+
+function getChargeResponseCode(verified: any) {
+  return String(
+    verified?.charge_response_code ||
+      verified?.chargeResponseCode ||
+      verified?.processor_response_code ||
+      verified?.data?.charge_response_code ||
+      ''
+  ).trim();
 }
 
 async function verifyFlutterwaveTransactionWithTimeout(transactionId: string) {
@@ -40,9 +89,7 @@ async function tryEnrollAwcUser(params: {
   txRef: string;
   transactionId: string;
 }) {
-  if (params.productKey !== 'awc') {
-    return;
-  }
+  if (params.productKey !== 'awc') return;
 
   const courseId = process.env.LEARNDASH_AWC_COURSE_ID;
 
@@ -102,7 +149,6 @@ export async function POST(req: NextRequest) {
     const signature = req.headers.get('verif-hash');
 
     if (!secretHash) {
-      console.error('❌ Webhook secret is not configured');
       return NextResponse.json(
         { error: 'Webhook secret is not configured' },
         { status: 500 }
@@ -124,9 +170,6 @@ export async function POST(req: NextRequest) {
     const rawText = await req.text();
     const payload = normalizePayload(rawText);
 
-    console.log('📦 Raw webhook body:', rawText);
-    console.log('📩 Parsed webhook payload:', payload);
-
     const event =
       payload?.event ||
       payload?.['event.type'] ||
@@ -147,13 +190,12 @@ export async function POST(req: NextRequest) {
       paymentStatus,
     });
 
-    const isSuccessfulPaymentEvent =
-      paymentStatus === 'successful' &&
-      (event === 'charge.completed' || event === 'CARD_TRANSACTION');
+    const isPotentialPaymentEvent =
+      event === 'charge.completed' ||
+      event === 'CARD_TRANSACTION' ||
+      paymentStatus === 'successful';
 
-    if (!isSuccessfulPaymentEvent) {
-      console.log('ℹ️ Ignored webhook event:', event);
-
+    if (!isPotentialPaymentEvent) {
       return NextResponse.json({
         ok: true,
         message: 'Webhook event ignored',
@@ -162,49 +204,44 @@ export async function POST(req: NextRequest) {
     }
 
     if (!transactionId) {
-      console.error('❌ Missing transaction ID');
-
       return NextResponse.json({
         ok: true,
         message: 'Webhook missing transaction ID',
       });
     }
 
-    let verified;
+    let verified: any;
 
     try {
       verified = await verifyFlutterwaveTransactionWithTimeout(
         String(transactionId)
       );
     } catch (verificationError) {
-      console.error(
-        '⏱️ Flutterwave verification timed out or failed:',
-        verificationError
-      );
+      console.error('⏱️ Flutterwave verification failed:', verificationError);
 
       return NextResponse.json(
         {
           ok: false,
           error: 'Flutterwave verification unavailable',
-          message:
-            'Webhook was received, but transaction verification did not complete in time.',
         },
         { status: 503 }
       );
     }
 
-    console.log('✅ Flutterwave transaction verification result:', {
-      verifiedStatus: verified.status,
-      verifiedTxRef: verified.tx_ref,
-      verifiedAmount: verified.amount,
-      verifiedCurrency: verified.currency,
+    const txRef = verified.tx_ref;
+    const paymentMethod = getPaymentMethod(verified);
+    const chargeResponseCode = getChargeResponseCode(verified);
+
+    console.log('✅ Flutterwave verification result:', {
+      status: verified.status,
+      txRef,
+      amount: verified.amount,
+      currency: verified.currency,
+      paymentMethod,
+      chargeResponseCode,
     });
 
-    const txRef = verified.tx_ref;
-
     if (!txRef) {
-      console.error('❌ Verified transaction has no tx_ref');
-
       return NextResponse.json({
         ok: true,
         message: 'Verified transaction has no tx_ref',
@@ -231,8 +268,6 @@ export async function POST(req: NextRequest) {
     const order = orderRows[0];
 
     if (!order) {
-      console.error('❌ Webhook order not found for tx_ref:', txRef);
-
       return NextResponse.json({
         ok: true,
         message: 'Order not found for webhook tx_ref',
@@ -241,12 +276,6 @@ export async function POST(req: NextRequest) {
     }
 
     if (order.flutterwave_tx_id === String(transactionId)) {
-      console.log('⚠️ Duplicate webhook ignored:', {
-        orderId: order.id,
-        txRef,
-        transactionId,
-      });
-
       return NextResponse.json({
         ok: true,
         message: 'Duplicate webhook ignored',
@@ -255,13 +284,6 @@ export async function POST(req: NextRequest) {
     }
 
     if (order.status === 'paid') {
-      console.log('ℹ️ Order already paid; webhook ignored:', {
-        orderId: order.id,
-        txRef,
-        existingFlutterwaveTxId: order.flutterwave_tx_id,
-        incomingTransactionId: transactionId,
-      });
-
       return NextResponse.json({
         ok: true,
         message: 'Order already processed',
@@ -272,41 +294,73 @@ export async function POST(req: NextRequest) {
     const expectedAmount = Number(order.price);
     const actualAmount = Number(verified.amount);
 
-    const isValid =
-      verified.status === 'successful' &&
-      verified.tx_ref === order.payment_reference &&
-      actualAmount === expectedAmount &&
-      verified.currency === order.currency;
+    const amountMatches = actualAmount === expectedAmount;
+    const currencyMatches = verified.currency === order.currency;
+    const txRefMatches = verified.tx_ref === order.payment_reference;
+    const statusSuccessful = verified.status === 'successful';
 
-    if (!isValid) {
+    const chargeCodeAcceptable =
+      chargeResponseCode === '' ||
+      chargeResponseCode === '00' ||
+      chargeResponseCode === '0';
+
+    const isUnsafeManualMethod = UNSAFE_MANUAL_METHODS.has(paymentMethod);
+    const isSafeAutoApproveMethod = SAFE_AUTO_APPROVE_METHODS.has(paymentMethod);
+
+    const isValidForAutoApproval =
+      statusSuccessful &&
+      txRefMatches &&
+      amountMatches &&
+      currencyMatches &&
+      chargeCodeAcceptable &&
+      isSafeAutoApproveMethod &&
+      !isUnsafeManualMethod;
+
+    if (!isValidForAutoApproval) {
       await sql`
         INSERT INTO audit_logs (actor_user_id, target_user_id, action, old_value, new_value, reason)
         VALUES (
           NULL,
           ${order.user_id},
-          'payment_verification_failed',
+          'payment_auto_approval_rejected',
           ${order.status},
-          'rejected',
+          'not_approved',
           ${JSON.stringify({
             source: 'webhook',
             transactionId,
-            expectedTxRef: order.payment_reference,
-            actualTxRef: verified.tx_ref,
+            txRef,
+            status: verified.status,
+            paymentMethod,
+            chargeResponseCode,
             expectedAmount,
             actualAmount,
             expectedCurrency: order.currency,
             actualCurrency: verified.currency,
-            actualStatus: verified.status,
+            txRefMatches,
+            amountMatches,
+            currencyMatches,
+            statusSuccessful,
+            chargeCodeAcceptable,
+            isSafeAutoApproveMethod,
+            isUnsafeManualMethod,
           })}
         )
       `;
 
-      console.error('❌ Webhook verification mismatch');
+      console.error('❌ Payment rejected for auto-approval:', {
+        txRef,
+        transactionId,
+        paymentMethod,
+        status: verified.status,
+      });
 
-      return NextResponse.json(
-        { error: 'Transaction verification mismatch' },
-        { status: 400 }
-      );
+      return NextResponse.json({
+        ok: true,
+        message:
+          'Payment received but not auto-approved. Manual review may be required.',
+        orderId: order.id,
+        paymentMethod,
+      });
     }
 
     await sql`
@@ -327,7 +381,7 @@ export async function POST(req: NextRequest) {
         'payment_verified_by_flutterwave_webhook',
         ${order.status},
         'paid',
-        ${'tx_ref=' + verified.tx_ref + '; tx_id=' + String(transactionId)}
+        ${'tx_ref=' + verified.tx_ref + '; tx_id=' + String(transactionId) + '; method=' + paymentMethod}
       )
     `;
 
@@ -361,12 +415,6 @@ export async function POST(req: NextRequest) {
         )
       `;
     }
-
-    console.log('✅ Flutterwave webhook processed successfully:', {
-      orderId: order.id,
-      txRef,
-      transactionId,
-    });
 
     return NextResponse.json({
       ok: true,
