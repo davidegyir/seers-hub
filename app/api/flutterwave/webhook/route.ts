@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import { verifyFlutterwaveTransaction } from '@/lib/flutterwave';
 import { applyProductAccess } from '@/lib/product-access';
+import { enrollUserInLearnDash } from '@/lib/learndash-bridge';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,9 +25,63 @@ async function verifyFlutterwaveTransactionWithTimeout(transactionId: string) {
   return Promise.race([
     verifyFlutterwaveTransaction(transactionId),
     new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('Flutterwave verification timeout')), 10000)
+      setTimeout(
+        () => reject(new Error('Flutterwave verification timeout')),
+        10000
+      )
     ),
   ]);
+}
+
+async function tryEnrollAwcUser(params: {
+  userId: string;
+  orderId: string;
+  productKey: string;
+  txRef: string;
+  transactionId: string;
+}) {
+  if (params.productKey !== 'awc') {
+    return;
+  }
+
+  const courseId = process.env.LEARNDASH_AWC_COURSE_ID;
+
+  if (!courseId) {
+    throw new Error('LEARNDASH_AWC_COURSE_ID is not configured');
+  }
+
+  const userRows = await sql`
+    SELECT email, full_name
+    FROM users
+    WHERE id = ${params.userId}
+    LIMIT 1
+  `;
+
+  const user = userRows[0];
+
+  if (!user?.email) {
+    throw new Error('User email not found for LearnDash enrollment');
+  }
+
+  const enrollment = await enrollUserInLearnDash({
+    email: user.email,
+    fullName: user.full_name,
+    courseId,
+    orderId: params.orderId,
+    txRef: params.txRef,
+  });
+
+  await sql`
+    INSERT INTO audit_logs (actor_user_id, target_user_id, action, old_value, new_value, reason)
+    VALUES (
+      NULL,
+      ${params.userId},
+      'learndash_enrollment_completed',
+      NULL,
+      ${'course_id=' + String(courseId)},
+      ${'tx_ref=' + params.txRef + '; tx_id=' + params.transactionId + '; wp_user_id=' + String(enrollment.user_id)}
+    )
+  `;
 }
 
 export async function GET() {
@@ -84,9 +139,7 @@ export async function POST(req: NextRequest) {
       payload?.transaction_id ||
       payload?.transactionId;
 
-    const paymentStatus =
-      payload?.data?.status ||
-      payload?.status;
+    const paymentStatus = payload?.data?.status || payload?.status;
 
     console.log('📌 Normalized webhook data:', {
       event,
@@ -120,9 +173,14 @@ export async function POST(req: NextRequest) {
     let verified;
 
     try {
-      verified = await verifyFlutterwaveTransactionWithTimeout(String(transactionId));
+      verified = await verifyFlutterwaveTransactionWithTimeout(
+        String(transactionId)
+      );
     } catch (verificationError) {
-      console.error('⏱️ Flutterwave verification timed out or failed:', verificationError);
+      console.error(
+        '⏱️ Flutterwave verification timed out or failed:',
+        verificationError
+      );
 
       return NextResponse.json(
         {
@@ -161,6 +219,7 @@ export async function POST(req: NextRequest) {
         orders.status,
         orders.payment_reference,
         orders.flutterwave_tx_id,
+        products.product_key,
         products.price,
         products.currency
       FROM orders
@@ -278,6 +337,30 @@ export async function POST(req: NextRequest) {
       productId: order.product_id,
       reason: 'flutterwave verified webhook',
     });
+
+    try {
+      await tryEnrollAwcUser({
+        userId: order.user_id,
+        orderId: order.id,
+        productKey: order.product_key,
+        txRef,
+        transactionId: String(transactionId),
+      });
+    } catch (enrollmentError) {
+      console.error('❌ LearnDash enrollment failed:', enrollmentError);
+
+      await sql`
+        INSERT INTO audit_logs (actor_user_id, target_user_id, action, old_value, new_value, reason)
+        VALUES (
+          NULL,
+          ${order.user_id},
+          'learndash_enrollment_failed',
+          NULL,
+          ${'product_key=' + order.product_key},
+          ${String(enrollmentError)}
+        )
+      `;
+    }
 
     console.log('✅ Flutterwave webhook processed successfully:', {
       orderId: order.id,
