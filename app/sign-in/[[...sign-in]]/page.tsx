@@ -27,6 +27,7 @@ export default function Page() {
           alignItems: 'center',
         }}
       >
+        {/* LEFT CONTENT */}
         <div>
           <p
             style={{
@@ -37,7 +38,7 @@ export default function Page() {
               marginBottom: '0.75rem',
             }}
           >
-            Seers Academy
+            SEERS ACADEMY
           </p>
 
           <h1
@@ -56,27 +57,14 @@ export default function Page() {
               fontSize: '1.08rem',
               lineHeight: 1.7,
               maxWidth: 560,
-              marginBottom: '1.5rem',
             }}
           >
             Use the same email you entered earlier so we can attach your payment
             and unlock the <strong>AWC Level 1 Masterclass</strong>.
           </p>
-
-          <div
-            style={{
-              display: 'grid',
-              gap: '0.7rem',
-              color: '#e5e7eb',
-              fontSize: '0.98rem',
-            }}
-          >
-            <p style={{ margin: 0 }}>✓ Secure payment identity</p>
-            <p style={{ margin: 0 }}>✓ Automatic access after verification</p>
-            <p style={{ margin: 0 }}>✓ LearnDash enrollment after payment</p>
-          </div>
         </div>
 
+        {/* RIGHT CARD */}
         <div
           style={{
             background: 'rgba(255,255,255,0.98)',
@@ -91,6 +79,10 @@ export default function Page() {
             signUpUrl="/sign-up"
             fallbackRedirectUrl="/payments?product=awc"
             appearance={{
+              layout: {
+                logoPlacement: 'none',
+                showOptionalFields: false,
+              },
               elements: {
                 rootBox: {
                   width: '100%',
@@ -116,6 +108,18 @@ export default function Page() {
                 footerActionLink: {
                   color: '#111827',
                   fontWeight: 700,
+                },
+              },
+              variables: {
+                colorPrimary: '#111827',
+              },
+              // 👇 THIS IS THE KEY PART
+              localization: {
+                signIn: {
+                  start: {
+                    title: 'Proceed to Seers Authentication',
+                    subtitle: 'Please sign in to continue',
+                  },
                 },
               },
             }}
