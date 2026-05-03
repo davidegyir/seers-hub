@@ -59,8 +59,7 @@ export default function Page() {
               maxWidth: 560,
             }}
           >
-            Use the same email you entered earlier so we can attach your payment
-            and unlock the <strong>AWC Level 1 Masterclass</strong>.
+            Use the same email you entered earlier.
           </p>
         </div>
 
@@ -112,15 +111,6 @@ export default function Page() {
               },
               variables: {
                 colorPrimary: '#111827',
-              },
-              // 👇 THIS IS THE KEY PART
-              localization: {
-                signIn: {
-                  start: {
-                    title: 'Proceed to Seers Authentication',
-                    subtitle: 'Please sign in to continue',
-                  },
-                },
               },
             }}
           />
