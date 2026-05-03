@@ -7,13 +7,22 @@ export const metadata: Metadata = {
   description: 'Seers Hub platform',
 };
 
+const clerkLocalization = {
+  signIn: {
+    start: {
+      title: 'Proceed to Seers Authentication',
+      subtitle: 'Please sign in to continue',
+    },
+  },
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
-    <ClerkProvider>
+    <ClerkProvider localization={clerkLocalization}>
       <html lang="en">
         <body>{children}</body>
       </html>
