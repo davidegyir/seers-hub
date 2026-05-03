@@ -33,10 +33,7 @@ type CallbackSearchParams = Promise<{
 }>;
 
 function normalizePaymentMethod(value: unknown) {
-  return String(value || '')
-    .trim()
-    .toLowerCase()
-    .replace(/-/g, '_');
+  return String(value || '').trim().toLowerCase().replace(/-/g, '_');
 }
 
 function getPaymentMethod(verified: any) {
@@ -59,6 +56,10 @@ function getChargeResponseCode(verified: any) {
       verified?.data?.charge_response_code ||
       ''
   ).trim();
+}
+
+function allowTestAutoApprove() {
+  return process.env.ALLOW_PAYMENT_TEST_AUTO_APPROVE === 'true';
 }
 
 async function verifyFlutterwaveTransactionWithTimeout(transactionId: string) {
@@ -159,6 +160,7 @@ async function processCallback(params: {
   const txRef = verified?.tx_ref || params.txRefFromUrl;
   const paymentMethod = getPaymentMethod(verified);
   const chargeResponseCode = getChargeResponseCode(verified);
+  const testAutoApproveEnabled = allowTestAutoApprove();
 
   if (!txRef) {
     return {
@@ -228,7 +230,7 @@ async function processCallback(params: {
   const isUnsafeManualMethod = UNSAFE_MANUAL_METHODS.has(paymentMethod);
   const isSafeAutoApproveMethod = SAFE_AUTO_APPROVE_METHODS.has(paymentMethod);
 
-  const isValidForAutoApproval =
+  const strictAutoApproval =
     statusSuccessful &&
     txRefMatches &&
     amountMatches &&
@@ -236,6 +238,16 @@ async function processCallback(params: {
     chargeCodeAcceptable &&
     isSafeAutoApproveMethod &&
     !isUnsafeManualMethod;
+
+  const testModeAutoApproval =
+    testAutoApproveEnabled &&
+    statusSuccessful &&
+    txRefMatches &&
+    amountMatches &&
+    currencyMatches &&
+    chargeCodeAcceptable;
+
+  const isValidForAutoApproval = strictAutoApproval || testModeAutoApproval;
 
   if (!isValidForAutoApproval) {
     await sql`
@@ -264,6 +276,7 @@ async function processCallback(params: {
           chargeCodeAcceptable,
           isSafeAutoApproveMethod,
           isUnsafeManualMethod,
+          testAutoApproveEnabled,
         })}
       )
     `;
@@ -296,7 +309,7 @@ async function processCallback(params: {
       'payment_verified_by_flutterwave_callback',
       ${order.status},
       'paid',
-      ${'tx_ref=' + verified.tx_ref + '; tx_id=' + String(params.transactionId) + '; method=' + paymentMethod}
+      ${'tx_ref=' + verified.tx_ref + '; tx_id=' + String(params.transactionId) + '; method=' + paymentMethod + '; test_auto_approve=' + String(testAutoApproveEnabled)}
     )
   `;
 
