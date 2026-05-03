@@ -2,42 +2,173 @@ import Link from 'next/link';
 import { sql } from '@/lib/db';
 import { verifyFlutterwaveTransaction } from '@/lib/flutterwave';
 import { applyProductAccess } from '@/lib/product-access';
+import { enrollUserInLearnDash } from '@/lib/learndash-bridge';
 
-type SearchParams = Promise<{
+export const dynamic = 'force-dynamic';
+
+const SAFE_AUTO_APPROVE_METHODS = new Set([
+  'card',
+  'mobilemoney',
+  'mobile_money',
+  'mobile money',
+  'momo',
+  'ussd',
+]);
+
+const UNSAFE_MANUAL_METHODS = new Set([
+  'bank',
+  'banktransfer',
+  'bank_transfer',
+  'bank transfer',
+  'bankdeposit',
+  'bank_deposit',
+  'bank deposit',
+  'account',
+]);
+
+type CallbackSearchParams = Promise<{
   status?: string;
   transaction_id?: string;
   tx_ref?: string;
 }>;
 
-export default async function PaymentCallbackPage({
-  searchParams,
-}: {
-  searchParams: SearchParams;
+function normalizePaymentMethod(value: unknown) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/-/g, '_');
+}
+
+function getPaymentMethod(verified: any) {
+  return normalizePaymentMethod(
+    verified?.payment_type ||
+      verified?.paymentType ||
+      verified?.payment_method ||
+      verified?.paymentMethod ||
+      verified?.data?.payment_type ||
+      verified?.data?.payment_method ||
+      verified?.meta?.payment_type
+  );
+}
+
+function getChargeResponseCode(verified: any) {
+  return String(
+    verified?.charge_response_code ||
+      verified?.chargeResponseCode ||
+      verified?.processor_response_code ||
+      verified?.data?.charge_response_code ||
+      ''
+  ).trim();
+}
+
+async function verifyFlutterwaveTransactionWithTimeout(transactionId: string) {
+  return Promise.race([
+    verifyFlutterwaveTransaction(transactionId),
+    new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error('Flutterwave verification timeout')),
+        10000
+      )
+    ),
+  ]);
+}
+
+async function tryEnrollAwcUser(params: {
+  userId: string;
+  orderId: string;
+  productKey: string;
+  txRef: string;
+  transactionId: string;
 }) {
-  const params = await searchParams;
+  if (params.productKey !== 'awc') return;
 
-  const status = params.status;
-  const transactionId = params.transaction_id;
-  const txRef = params.tx_ref;
+  const courseId = process.env.LEARNDASH_AWC_COURSE_ID;
 
-  if (!transactionId || !txRef) {
-    return (
-      <main style={pageStyle}>
-        <h1>Payment Not Verified</h1>
-        <p>Missing payment reference details. Please contact support if you were charged.</p>
-        <Link href="/payments">Return to payments</Link>
-      </main>
-    );
+  if (!courseId) {
+    throw new Error('LEARNDASH_AWC_COURSE_ID is not configured');
   }
 
-  if (status !== 'successful' && status !== 'completed') {
-    return (
-      <main style={pageStyle}>
-        <h1>Payment Not Completed</h1>
-        <p>Your payment was not completed successfully.</p>
-        <Link href="/payments">Try again</Link>
-      </main>
+  const userRows = await sql`
+    SELECT email, full_name
+    FROM users
+    WHERE id = ${params.userId}
+    LIMIT 1
+  `;
+
+  const user = userRows[0];
+
+  if (!user?.email) {
+    throw new Error('User email not found for LearnDash enrollment');
+  }
+
+  const enrollment = await enrollUserInLearnDash({
+    email: user.email,
+    fullName: user.full_name,
+    courseId,
+    orderId: params.orderId,
+    txRef: params.txRef,
+  });
+
+  await sql`
+    INSERT INTO audit_logs (actor_user_id, target_user_id, action, old_value, new_value, reason)
+    VALUES (
+      NULL,
+      ${params.userId},
+      'learndash_enrollment_completed',
+      NULL,
+      ${'course_id=' + String(courseId)},
+      ${'source=callback; tx_ref=' + params.txRef + '; tx_id=' + params.transactionId + '; wp_user_id=' + String(enrollment.user_id)}
+    )
+  `;
+}
+
+async function processCallback(params: {
+  transactionId?: string;
+  txRefFromUrl?: string;
+}) {
+  if (!params.transactionId) {
+    return {
+      ok: false,
+      title: 'Payment Could Not Be Verified',
+      message:
+        'No transaction reference was received. Please contact support if you believe payment was completed.',
+      actionLabel: 'Return to Payment',
+      actionHref: '/payments?product=awc',
+    };
+  }
+
+  let verified: any;
+
+  try {
+    verified = await verifyFlutterwaveTransactionWithTimeout(
+      params.transactionId
     );
+  } catch (error) {
+    console.error('Callback verification failed:', error);
+
+    return {
+      ok: false,
+      title: 'Verification Temporarily Unavailable',
+      message:
+        'Your payment response was received, but verification could not be completed. Please try again shortly or contact support.',
+      actionLabel: 'Return to Dashboard',
+      actionHref: '/dashboard',
+    };
+  }
+
+  const txRef = verified?.tx_ref || params.txRefFromUrl;
+  const paymentMethod = getPaymentMethod(verified);
+  const chargeResponseCode = getChargeResponseCode(verified);
+
+  if (!txRef) {
+    return {
+      ok: false,
+      title: 'Payment Reference Missing',
+      message:
+        'The transaction was checked, but no payment reference was found.',
+      actionLabel: 'Return to Payment',
+      actionHref: '/payments?product=awc',
+    };
   }
 
   const orderRows = await sql`
@@ -47,9 +178,10 @@ export default async function PaymentCallbackPage({
       orders.product_id,
       orders.status,
       orders.payment_reference,
+      orders.flutterwave_tx_id,
+      products.product_key,
       products.price,
-      products.currency,
-      products.name AS product_name
+      products.currency
     FROM orders
     INNER JOIN products ON orders.product_id = products.id
     WHERE orders.payment_reference = ${txRef}
@@ -59,143 +191,232 @@ export default async function PaymentCallbackPage({
   const order = orderRows[0];
 
   if (!order) {
-    return (
-      <main style={pageStyle}>
-        <h1>Order Not Found</h1>
-        <p>
-          Payment reference was received, but no matching order was found in Seers Hub.
-        </p>
-        <p>Reference: {txRef}</p>
-        <Link href="/payments">Return to payments</Link>
-      </main>
-    );
+    return {
+      ok: false,
+      title: 'Order Not Found',
+      message:
+        'The payment reference was received, but no matching order was found.',
+      actionLabel: 'Return to Payment',
+      actionHref: '/payments?product=awc',
+    };
   }
 
   if (order.status === 'paid') {
-    return (
-      <main style={pageStyle}>
-        <h1>Payment Already Confirmed</h1>
-        <p>Your payment has already been verified and access has already been granted.</p>
-        <Link href="/dashboard">Go to dashboard</Link>
-      </main>
-    );
+    return {
+      ok: true,
+      title: 'Payment Already Confirmed',
+      message: 'Your payment has already been verified and access granted.',
+      actionLabel: 'Go to Course',
+      actionHref:
+        'https://www.seersapp.com/academy/how-to-reduce-operating-cost-and-increase-productivity-profitability-without-hiring-more-people/',
+    };
   }
+
+  const expectedAmount = Number(order.price);
+  const actualAmount = Number(verified.amount);
+
+  const amountMatches = actualAmount === expectedAmount;
+  const currencyMatches = verified.currency === order.currency;
+  const txRefMatches = verified.tx_ref === order.payment_reference;
+  const statusSuccessful = verified.status === 'successful';
+
+  const chargeCodeAcceptable =
+    chargeResponseCode === '' ||
+    chargeResponseCode === '00' ||
+    chargeResponseCode === '0';
+
+  const isUnsafeManualMethod = UNSAFE_MANUAL_METHODS.has(paymentMethod);
+  const isSafeAutoApproveMethod = SAFE_AUTO_APPROVE_METHODS.has(paymentMethod);
+
+  const isValidForAutoApproval =
+    statusSuccessful &&
+    txRefMatches &&
+    amountMatches &&
+    currencyMatches &&
+    chargeCodeAcceptable &&
+    isSafeAutoApproveMethod &&
+    !isUnsafeManualMethod;
+
+  if (!isValidForAutoApproval) {
+    await sql`
+      INSERT INTO audit_logs (actor_user_id, target_user_id, action, old_value, new_value, reason)
+      VALUES (
+        NULL,
+        ${order.user_id},
+        'payment_callback_auto_approval_rejected',
+        ${order.status},
+        'not_approved',
+        ${JSON.stringify({
+          source: 'callback',
+          transactionId: params.transactionId,
+          txRef,
+          status: verified.status,
+          paymentMethod,
+          chargeResponseCode,
+          expectedAmount,
+          actualAmount,
+          expectedCurrency: order.currency,
+          actualCurrency: verified.currency,
+          txRefMatches,
+          amountMatches,
+          currencyMatches,
+          statusSuccessful,
+          chargeCodeAcceptable,
+          isSafeAutoApproveMethod,
+          isUnsafeManualMethod,
+        })}
+      )
+    `;
+
+    return {
+      ok: false,
+      title: 'Payment Requires Review',
+      message:
+        'This payment method cannot be automatically approved. If you used bank transfer or deposit, access will be granted after confirmation.',
+      actionLabel: 'Return to Dashboard',
+      actionHref: '/dashboard',
+    };
+  }
+
+  await sql`
+    UPDATE orders
+    SET status = 'paid',
+        flutterwave_tx_id = ${String(params.transactionId)},
+        payment_verified_at = NOW(),
+        payment_provider = 'flutterwave',
+        updated_at = NOW()
+    WHERE id = ${order.id}
+  `;
+
+  await sql`
+    INSERT INTO audit_logs (actor_user_id, target_user_id, action, old_value, new_value, reason)
+    VALUES (
+      NULL,
+      ${order.user_id},
+      'payment_verified_by_flutterwave_callback',
+      ${order.status},
+      'paid',
+      ${'tx_ref=' + verified.tx_ref + '; tx_id=' + String(params.transactionId) + '; method=' + paymentMethod}
+    )
+  `;
+
+  await applyProductAccess({
+    actorUserId: null,
+    targetUserId: order.user_id,
+    productId: order.product_id,
+    reason: 'flutterwave verified callback',
+  });
 
   try {
-    const verified = await verifyFlutterwaveTransaction(transactionId);
-
-    const expectedAmount = Number(order.price);
-    const actualAmount = Number(verified.amount);
-
-    const isValid =
-      verified.status === 'successful' &&
-      verified.tx_ref === order.payment_reference &&
-      actualAmount === expectedAmount &&
-      verified.currency === order.currency;
-
-    if (!isValid) {
-      await sql`
-        INSERT INTO audit_logs (actor_user_id, target_user_id, action, old_value, new_value, reason)
-        VALUES (
-          NULL,
-          ${order.user_id},
-          'payment_verification_failed',
-          ${order.status},
-          'rejected',
-          ${JSON.stringify({
-            source: 'callback',
-            transactionId,
-            expectedTxRef: order.payment_reference,
-            actualTxRef: verified.tx_ref,
-            expectedAmount,
-            actualAmount,
-            expectedCurrency: order.currency,
-            actualCurrency: verified.currency,
-            actualStatus: verified.status,
-          })}
-        )
-      `;
-
-      return (
-        <main style={pageStyle}>
-          <h1>Payment Verification Failed</h1>
-          <p>
-            Flutterwave returned a payment result, but the verified transaction details
-            did not match your order.
-          </p>
-          <p>Please contact support if you were charged.</p>
-          <Link href="/payments">Return to payments</Link>
-        </main>
-      );
-    }
-
-    await sql`
-      UPDATE orders
-      SET status = 'paid',
-          flutterwave_tx_id = ${String(transactionId)},
-          updated_at = NOW()
-      WHERE id = ${order.id}
-    `;
-
-    await sql`
-      INSERT INTO audit_logs (actor_user_id, target_user_id, action, old_value, new_value, reason)
-      VALUES (
-        NULL,
-        ${order.user_id},
-        'payment_verified_by_flutterwave_callback',
-        ${order.status},
-        'paid',
-        ${'tx_ref=' + verified.tx_ref + '; tx_id=' + String(transactionId)}
-      )
-    `;
-
-    await applyProductAccess({
-      actorUserId: null,
-      targetUserId: order.user_id,
-      productId: order.product_id,
-      reason: 'flutterwave verified callback',
+    await tryEnrollAwcUser({
+      userId: order.user_id,
+      orderId: order.id,
+      productKey: order.product_key,
+      txRef,
+      transactionId: String(params.transactionId),
     });
-
-    return (
-      <main style={pageStyle}>
-        <h1>Payment Confirmed</h1>
-        <p>Your payment for {order.product_name} has been verified.</p>
-        <p>Your access has now been granted.</p>
-        <div style={{ display: 'grid', gap: '0.5rem', marginTop: '1rem' }}>
-          <Link href="/dashboard">Go to dashboard</Link>
-          <Link href="/premium">Go to premium area</Link>
-        </div>
-      </main>
-    );
   } catch (error) {
-    console.error('Payment callback verification error:', error);
+    console.error('LearnDash callback enrollment failed:', error);
 
     await sql`
       INSERT INTO audit_logs (actor_user_id, target_user_id, action, old_value, new_value, reason)
       VALUES (
         NULL,
         ${order.user_id},
-        'payment_verification_failed',
-        ${order.status},
-        'error',
-        ${'callback verification error for tx_ref=' + txRef}
+        'learndash_enrollment_failed',
+        NULL,
+        ${'product_key=' + order.product_key},
+        ${'source=callback; ' + String(error)}
       )
     `;
-
-    return (
-      <main style={pageStyle}>
-        <h1>Payment Verification Error</h1>
-        <p>
-          Your payment result was received, but the system could not verify it at this moment.
-        </p>
-        <p>Please contact support if you were charged.</p>
-        <Link href="/payments">Return to payments</Link>
-      </main>
-    );
   }
+
+  return {
+    ok: true,
+    title: 'Payment Confirmed',
+    message: 'Your payment has been verified and access has been granted.',
+    actionLabel: 'Go to Course',
+    actionHref:
+      'https://www.seersapp.com/academy/how-to-reduce-operating-cost-and-increase-productivity-profitability-without-hiring-more-people/',
+  };
 }
 
-const pageStyle = {
-  padding: '2rem',
-  fontFamily: 'Arial, sans-serif',
-};
+export default async function PaymentCallbackPage({
+  searchParams,
+}: {
+  searchParams: CallbackSearchParams;
+}) {
+  const params = await searchParams;
+
+  const result = await processCallback({
+    transactionId: params.transaction_id,
+    txRefFromUrl: params.tx_ref,
+  });
+
+  return (
+    <main
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: '#f8fafc',
+        fontFamily: 'Arial, sans-serif',
+        padding: '2rem',
+      }}
+    >
+      <section
+        style={{
+          width: '100%',
+          maxWidth: 620,
+          background: 'white',
+          border: '1px solid #e5e7eb',
+          borderRadius: 18,
+          padding: '2rem',
+          boxShadow: '0 18px 40px rgba(15, 23, 42, 0.08)',
+          textAlign: 'center',
+        }}
+      >
+        <div
+          style={{
+            width: 56,
+            height: 56,
+            borderRadius: '999px',
+            margin: '0 auto 1rem',
+            display: 'grid',
+            placeItems: 'center',
+            background: result.ok ? '#dcfce7' : '#fef3c7',
+            color: result.ok ? '#166534' : '#92400e',
+            fontSize: '1.5rem',
+            fontWeight: 800,
+          }}
+        >
+          {result.ok ? '✓' : '!'}
+        </div>
+
+        <h1 style={{ color: '#111827', marginBottom: '0.75rem' }}>
+          {result.title}
+        </h1>
+
+        <p style={{ color: '#4b5563', lineHeight: 1.6, marginBottom: '1.5rem' }}>
+          {result.message}
+        </p>
+
+        <Link
+          href={result.actionHref}
+          style={{
+            display: 'inline-block',
+            padding: '0.8rem 1.2rem',
+            borderRadius: 10,
+            background: result.ok ? '#16a34a' : '#111827',
+            color: 'white',
+            textDecoration: 'none',
+            fontWeight: 700,
+          }}
+        >
+          {result.actionLabel}
+        </Link>
+      </section>
+    </main>
+  );
+}
