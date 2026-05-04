@@ -1,8 +1,13 @@
 'use client';
 
 import { SignIn } from '@clerk/nextjs';
+import { useSearchParams } from 'next/navigation';
 
 export default function Page() {
+  const searchParams = useSearchParams();
+  const email = searchParams.get('email') || undefined;
+  const redirectUrl = searchParams.get('redirect_url') || '/payments?product=awc';
+
   return (
     <main
       style={{
@@ -27,7 +32,6 @@ export default function Page() {
           alignItems: 'center',
         }}
       >
-        {/* LEFT CONTENT */}
         <div>
           <p
             style={{
@@ -63,7 +67,6 @@ export default function Page() {
           </p>
         </div>
 
-        {/* RIGHT CARD */}
         <div
           style={{
             background: 'rgba(255,255,255,0.98)',
@@ -76,7 +79,11 @@ export default function Page() {
             routing="path"
             path="/sign-in"
             signUpUrl="/sign-up"
-            fallbackRedirectUrl="/payments?product=awc"
+            fallbackRedirectUrl={redirectUrl}
+            forceRedirectUrl={redirectUrl}
+            initialValues={{
+              emailAddress: email,
+            }}
             appearance={{
               layout: {
                 logoPlacement: 'none',

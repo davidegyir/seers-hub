@@ -20,6 +20,11 @@ export default clerkMiddleware(async (auth, req) => {
     const signInUrl = new URL('/sign-in', req.url);
     signInUrl.searchParams.set('redirect_url', req.url);
 
+    const email = req.nextUrl.searchParams.get('email');
+    if (email) {
+      signInUrl.searchParams.set('email', email);
+    }
+
     return NextResponse.redirect(signInUrl);
   }
 });
