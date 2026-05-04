@@ -13,6 +13,7 @@ export async function startCheckout(formData: FormData) {
   }
 
   const productId = formData.get('productId')?.toString();
+  const checkoutIntentId = formData.get('checkoutIntentId')?.toString();
 
   if (!productId) {
     throw new Error('Missing product');
@@ -36,7 +37,7 @@ export async function startCheckout(formData: FormData) {
   }
 
   const productRows = await sql`
-    SELECT id, name, description, price, currency, is_active
+    SELECT id, product_key, name, description, price, currency, is_active
     FROM products
     WHERE id = ${productId}
     LIMIT 1
@@ -48,9 +49,48 @@ export async function startCheckout(formData: FormData) {
     throw new Error('Product not available');
   }
 
+  let checkoutIntent = null;
+
+  if (checkoutIntentId) {
+    const intentRows = await sql`
+      SELECT id, email, product_slug, status, expires_at
+      FROM checkout_intents
+      WHERE id = ${checkoutIntentId}
+      LIMIT 1
+    `;
+
+    checkoutIntent = intentRows[0];
+
+    if (!checkoutIntent) {
+      throw new Error('Checkout intent not found');
+    }
+
+    if (new Date(checkoutIntent.expires_at) < new Date()) {
+      throw new Error('Checkout intent expired');
+    }
+
+    if (checkoutIntent.product_slug !== product.product_key) {
+      throw new Error('Checkout intent does not match selected product');
+    }
+  }
+
   const orderRows = await sql`
-    INSERT INTO orders (user_id, product_id, status, created_at, updated_at)
-    VALUES (${user.id}, ${product.id}, 'pending', NOW(), NOW())
+    INSERT INTO orders (
+      user_id,
+      product_id,
+      checkout_intent_id,
+      status,
+      created_at,
+      updated_at
+    )
+    VALUES (
+      ${user.id},
+      ${product.id},
+      ${checkoutIntentId || null},
+      'pending',
+      NOW(),
+      NOW()
+    )
     RETURNING id
   `;
 
@@ -63,11 +103,22 @@ export async function startCheckout(formData: FormData) {
     WHERE id = ${order.id}
   `;
 
+  if (checkoutIntentId) {
+    await sql`
+      UPDATE checkout_intents
+      SET
+        order_id = ${order.id},
+        status = 'checkout_started',
+        updated_at = NOW()
+      WHERE id = ${checkoutIntentId}
+    `;
+  }
+
   const checkoutLink = await createFlutterwaveCheckout({
     amount: Number(product.price),
     currency: product.currency,
     txRef,
-    email: user.email,
+    email: checkoutIntent?.email || user.email,
     name: user.full_name,
     title: product.name,
     description: product.description,
