@@ -38,7 +38,8 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json();
-    const { email, product, source } = body;
+
+    const { name, mobile, email, product, source } = body;
 
     if (!email || !product) {
       return NextResponse.json(
@@ -54,11 +55,25 @@ export async function POST(req: Request) {
 
     const result = await pool.query(
       `
-      INSERT INTO checkout_intents (email, product_slug, source, expires_at)
-      VALUES ($1, $2, $3, $4)
+      INSERT INTO checkout_intents (
+        full_name,
+        mobile,
+        email,
+        product_slug,
+        source,
+        expires_at
+      )
+      VALUES ($1, $2, $3, $4, $5, $6)
       RETURNING id
       `,
-      [email, product, source || null, expiresAt]
+      [
+        name || null,
+        mobile || null,
+        email,
+        product,
+        source || null,
+        expiresAt,
+      ]
     );
 
     return NextResponse.json(
