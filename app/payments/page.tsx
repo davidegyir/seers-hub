@@ -5,6 +5,7 @@ import { startCheckout } from './actions';
 
 type SearchParams = Promise<{
   product?: string;
+  intent?: string;
 }>;
 
 function formatPrice(currency: string, price: string | number) {
@@ -22,14 +23,23 @@ export default async function PaymentsPage({
 }: {
   searchParams: SearchParams;
 }) {
+  const params = await searchParams;
+  const intentId = params.intent;
+  let productKey = params.product;
+  let checkoutIntent: any = null;
+  let intentError: string | null = null;
+
   const { userId } = await auth();
 
   if (!userId) {
-    redirect('/sign-in');
-  }
+    const redirectTarget = intentId
+      ? `/payments?intent=${encodeURIComponent(intentId)}`
+      : productKey
+        ? `/payments?product=${encodeURIComponent(productKey)}`
+        : '/payments';
 
-  const params = await searchParams;
-  const productKey = params.product;
+    redirect(`/sign-in?redirect_url=${encodeURIComponent(redirectTarget)}`);
+  }
 
   const userRows = await sql`
     SELECT status
@@ -48,20 +58,55 @@ export default async function PaymentsPage({
     redirect('/suspended');
   }
 
-  const products = productKey
-    ? await sql`
-        SELECT id, product_key, name, description, price, currency
-        FROM products
-        WHERE is_active = true
-          AND product_key = ${productKey}
-        ORDER BY name ASC
-      `
-    : await sql`
-        SELECT id, product_key, name, description, price, currency
-        FROM products
-        WHERE is_active = true
-        ORDER BY name ASC
+  if (intentId) {
+    const intentRows = await sql`
+      SELECT
+        id,
+        full_name,
+        mobile,
+        email,
+        product_slug,
+        source,
+        status,
+        expires_at
+      FROM checkout_intents
+      WHERE id = ${intentId}
+      LIMIT 1
+    `;
+
+    checkoutIntent = intentRows[0];
+
+    if (!checkoutIntent) {
+      intentError = 'Checkout intent not found.';
+    } else if (new Date(checkoutIntent.expires_at) < new Date()) {
+      intentError = 'Checkout intent expired. Please start again from the registration page.';
+    } else {
+      productKey = checkoutIntent.product_slug;
+
+      await sql`
+        UPDATE checkout_intents
+        SET clerk_user_id = ${userId}
+        WHERE id = ${intentId}
       `;
+    }
+  }
+
+  const products = intentError
+    ? []
+    : productKey
+      ? await sql`
+          SELECT id, product_key, name, description, price, currency
+          FROM products
+          WHERE is_active = true
+            AND product_key = ${productKey}
+          ORDER BY name ASC
+        `
+      : await sql`
+          SELECT id, product_key, name, description, price, currency
+          FROM products
+          WHERE is_active = true
+          ORDER BY name ASC
+        `;
 
   return (
     <main
@@ -79,7 +124,50 @@ export default async function PaymentsPage({
           Confirm your selection and continue to the available payment options.
         </p>
 
-        {products.length === 0 ? (
+        {checkoutIntent && !intentError ? (
+          <div
+            style={{
+              background: '#eff6ff',
+              border: '1px solid #bfdbfe',
+              borderRadius: '12px',
+              padding: '1rem',
+              marginBottom: '1.5rem',
+              color: '#1e3a8a',
+            }}
+          >
+            <strong>Access prepared for:</strong>{' '}
+            {checkoutIntent.full_name || checkoutIntent.email}
+          </div>
+        ) : null}
+
+        {intentError ? (
+          <div
+            style={{
+              background: 'white',
+              border: '1px solid #e5e7eb',
+              borderRadius: '12px',
+              padding: '1.5rem',
+            }}
+          >
+            <h2 style={{ marginTop: 0 }}>Checkout session unavailable</h2>
+            <p style={{ color: '#4b5563' }}>{intentError}</p>
+            <a
+              href="https://www.seersapp.com/awc"
+              style={{
+                display: 'inline-block',
+                marginTop: '1rem',
+                padding: '0.8rem 1.15rem',
+                borderRadius: '10px',
+                background: '#111827',
+                color: 'white',
+                textDecoration: 'none',
+                fontWeight: 700,
+              }}
+            >
+              Start Again
+            </a>
+          </div>
+        ) : products.length === 0 ? (
           <div
             style={{
               background: 'white',
@@ -154,6 +242,9 @@ export default async function PaymentsPage({
 
                 <form action={startCheckout}>
                   <input type="hidden" name="productId" value={product.id} />
+                  {intentId ? (
+                    <input type="hidden" name="checkoutIntentId" value={intentId} />
+                  ) : null}
 
                   <button
                     type="submit"
