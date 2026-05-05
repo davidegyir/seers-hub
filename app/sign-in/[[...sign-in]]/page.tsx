@@ -1,12 +1,59 @@
 'use client';
 
 import { SignIn } from '@clerk/nextjs';
+import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+
+function extractIntentFromRedirectUrl(redirectUrl: string | null) {
+  if (!redirectUrl) return null;
+
+  try {
+    const decodedUrl = decodeURIComponent(redirectUrl);
+
+    const url = decodedUrl.startsWith('http')
+      ? new URL(decodedUrl)
+      : new URL(decodedUrl, 'https://portal.seersapp.com');
+
+    return url.searchParams.get('intent');
+  } catch {
+    return null;
+  }
+}
 
 export default function Page() {
   const searchParams = useSearchParams();
-  const email = searchParams.get('email') || undefined;
+
+  const directEmail = searchParams.get('email') || undefined;
   const redirectUrl = searchParams.get('redirect_url') || '/payments?product=awc';
+
+  const intentId = useMemo(
+    () => extractIntentFromRedirectUrl(redirectUrl),
+    [redirectUrl]
+  );
+
+  const [email, setEmail] = useState<string | undefined>(directEmail);
+  const [isLoadingIntent, setIsLoadingIntent] = useState(Boolean(intentId && !directEmail));
+
+  useEffect(() => {
+    async function loadIntentEmail() {
+      if (!intentId || directEmail) return;
+
+      try {
+        const response = await fetch(`/api/checkout-intent/${intentId}`);
+        const data = await response.json();
+
+        if (data.success && data.intent?.email) {
+          setEmail(data.intent.email);
+        }
+      } catch (error) {
+        console.error('Could not load checkout intent email:', error);
+      } finally {
+        setIsLoadingIntent(false);
+      }
+    }
+
+    loadIntentEmail();
+  }, [intentId, directEmail]);
 
   return (
     <main
@@ -75,52 +122,67 @@ export default function Page() {
             boxShadow: '0 24px 70px rgba(0,0,0,0.32)',
           }}
         >
-          <SignIn
-            routing="path"
-            path="/sign-in"
-            signUpUrl="/sign-up"
-            fallbackRedirectUrl={redirectUrl}
-            forceRedirectUrl={redirectUrl}
-            initialValues={{
-              emailAddress: email,
-            }}
-            appearance={{
-              layout: {
-                logoPlacement: 'none',
-                showOptionalFields: false,
-              },
-              elements: {
-                rootBox: {
-                  width: '100%',
+          {isLoadingIntent ? (
+            <div
+              style={{
+                background: 'white',
+                color: '#111827',
+                borderRadius: 16,
+                padding: '2rem',
+                textAlign: 'center',
+              }}
+            >
+              Preparing your sign-in...
+            </div>
+          ) : (
+            <SignIn
+              key={email || 'no-email'}
+              routing="path"
+              path="/sign-in"
+              signUpUrl="/sign-up"
+              fallbackRedirectUrl={redirectUrl}
+              forceRedirectUrl={redirectUrl}
+              initialValues={{
+                emailAddress: email,
+              }}
+              appearance={{
+                layout: {
+                  logoPlacement: 'none',
+                  showOptionalFields: false,
                 },
-                card: {
-                  width: '100%',
-                  boxShadow: 'none',
-                  border: 'none',
-                  borderRadius: '16px',
+                elements: {
+                  rootBox: {
+                    width: '100%',
+                  },
+                  card: {
+                    width: '100%',
+                    boxShadow: 'none',
+                    border: 'none',
+                    borderRadius: '16px',
+                  },
+                  headerTitle: {
+                    fontSize: '1.25rem',
+                    color: '#111827',
+                  },
+                  headerSubtitle: {
+                    color: '#6b7280',
+                  },
+                  formButtonPrimary: {
+                    backgroundColor: '#111827',
+                    color: 'white',
+                    boxShadow: 'none',
+                  },
+                  footerActionLink: {
+                    color: '#111827',
+                    fontWeight: 700,
+                  },
                 },
-                headerTitle: {
-                  fontSize: '1.25rem',
-                  color: '#111827',
+                variables: {
+                  colorPrimary: '#111827',
                 },
-                headerSubtitle: {
-                  color: '#6b7280',
-                },
-                formButtonPrimary: {
-                  backgroundColor: '#111827',
-                  color: 'white',
-                  boxShadow: 'none',
-                },
-                footerActionLink: {
-                  color: '#111827',
-                  fontWeight: 700,
-                },
-              },
-              variables: {
-                colorPrimary: '#111827',
-              },
-            }}
-          />
+              }}
+            />
+          )}
         </div>
       </section>
     </main>
