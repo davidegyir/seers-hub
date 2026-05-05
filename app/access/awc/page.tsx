@@ -1,4 +1,4 @@
-import { auth } from '@clerk/nextjs/server';
+import { auth, currentUser } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
 import { sql } from '@/lib/db';
 import { createWordPressLoginLink } from '@/lib/wp-login-token';
@@ -15,24 +15,59 @@ export default async function AwcAccessPage() {
     redirect('/sign-in?redirect_url=/access/awc');
   }
 
-  const userRows = await sql`
-    SELECT id, email, status
+  let userRows = await sql`
+    SELECT id, email, full_name, status
     FROM users
     WHERE clerk_user_id = ${userId}
     LIMIT 1
   `;
 
-  const user = userRows[0];
+  let user = userRows[0];
 
   if (!user) {
-    redirect('/sign-in?redirect_url=/access/awc');
+    const clerkUser = await currentUser();
+
+    const email =
+      clerkUser?.primaryEmailAddress?.emailAddress ||
+      clerkUser?.emailAddresses?.[0]?.emailAddress ||
+      null;
+
+    const fullName =
+      [clerkUser?.firstName, clerkUser?.lastName].filter(Boolean).join(' ') ||
+      email ||
+      'Seers User';
+
+    if (!email) {
+      redirect('/sign-in?redirect_url=/access/awc');
+    }
+
+    const insertedRows = await sql`
+      INSERT INTO users (
+        clerk_user_id,
+        email,
+        full_name,
+        status,
+        created_at,
+        updated_at
+      )
+      VALUES (
+        ${userId},
+        ${email},
+        ${fullName},
+        'active',
+        NOW(),
+        NOW()
+      )
+      RETURNING id, email, full_name, status
+    `;
+
+    user = insertedRows[0];
   }
 
   if (user.status === 'suspended') {
     redirect('/suspended');
   }
 
-  // ✅ CORRECT entitlement check
   const entitlementRows = await sql`
     SELECT id
     FROM entitlements
@@ -54,6 +89,5 @@ export default async function AwcAccessPage() {
     redirect(loginLink);
   }
 
-  // Not paid → go to payment
   redirect('/payments?product=awc');
 }
