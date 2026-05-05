@@ -6,6 +6,8 @@ import { enrollUserInLearnDash } from '@/lib/learndash-bridge';
 
 export const dynamic = 'force-dynamic';
 
+const AWC_MASTERCLASS_URL = 'https://www.seersapp.com/academy/awc-level-1/';
+
 const SAFE_AUTO_APPROVE_METHODS = new Set([
   'card',
   'mobilemoney',
@@ -111,14 +113,28 @@ async function tryEnrollAwcUser(params: {
   });
 
   await sql`
-    INSERT INTO audit_logs (actor_user_id, target_user_id, action, old_value, new_value, reason)
+    INSERT INTO audit_logs (
+      actor_user_id,
+      target_user_id,
+      action,
+      old_value,
+      new_value,
+      reason
+    )
     VALUES (
       NULL,
       ${params.userId},
       'learndash_enrollment_completed',
       NULL,
       ${'course_id=' + String(courseId)},
-      ${'source=callback; tx_ref=' + params.txRef + '; tx_id=' + params.transactionId + '; wp_user_id=' + String(enrollment.user_id)}
+      ${
+        'source=callback; tx_ref=' +
+        params.txRef +
+        '; tx_id=' +
+        params.transactionId +
+        '; wp_user_id=' +
+        String(enrollment.user_id)
+      }
     )
   `;
 }
@@ -208,9 +224,8 @@ async function processCallback(params: {
       ok: true,
       title: 'Payment Already Confirmed',
       message: 'Your payment has already been verified and access granted.',
-      actionLabel: 'Go to Course',
-      actionHref:
-        'https://www.seersapp.com/academy/how-to-reduce-operating-cost-and-increase-productivity-profitability-without-hiring-more-people/',
+      actionLabel: 'Go to Masterclass',
+      actionHref: AWC_MASTERCLASS_URL,
     };
   }
 
@@ -251,7 +266,14 @@ async function processCallback(params: {
 
   if (!isValidForAutoApproval) {
     await sql`
-      INSERT INTO audit_logs (actor_user_id, target_user_id, action, old_value, new_value, reason)
+      INSERT INTO audit_logs (
+        actor_user_id,
+        target_user_id,
+        action,
+        old_value,
+        new_value,
+        reason
+      )
       VALUES (
         NULL,
         ${order.user_id},
@@ -293,23 +315,40 @@ async function processCallback(params: {
 
   await sql`
     UPDATE orders
-    SET status = 'paid',
-        flutterwave_tx_id = ${String(params.transactionId)},
-        payment_verified_at = NOW(),
-        payment_provider = 'flutterwave',
-        updated_at = NOW()
+    SET
+      status = 'paid',
+      flutterwave_tx_id = ${String(params.transactionId)},
+      payment_verified_at = NOW(),
+      payment_provider = 'flutterwave',
+      updated_at = NOW()
     WHERE id = ${order.id}
   `;
 
   await sql`
-    INSERT INTO audit_logs (actor_user_id, target_user_id, action, old_value, new_value, reason)
+    INSERT INTO audit_logs (
+      actor_user_id,
+      target_user_id,
+      action,
+      old_value,
+      new_value,
+      reason
+    )
     VALUES (
       NULL,
       ${order.user_id},
       'payment_verified_by_flutterwave_callback',
       ${order.status},
       'paid',
-      ${'tx_ref=' + verified.tx_ref + '; tx_id=' + String(params.transactionId) + '; method=' + paymentMethod + '; test_auto_approve=' + String(testAutoApproveEnabled)}
+      ${
+        'tx_ref=' +
+        verified.tx_ref +
+        '; tx_id=' +
+        String(params.transactionId) +
+        '; method=' +
+        paymentMethod +
+        '; test_auto_approve=' +
+        String(testAutoApproveEnabled)
+      }
     )
   `;
 
@@ -332,7 +371,14 @@ async function processCallback(params: {
     console.error('LearnDash callback enrollment failed:', error);
 
     await sql`
-      INSERT INTO audit_logs (actor_user_id, target_user_id, action, old_value, new_value, reason)
+      INSERT INTO audit_logs (
+        actor_user_id,
+        target_user_id,
+        action,
+        old_value,
+        new_value,
+        reason
+      )
       VALUES (
         NULL,
         ${order.user_id},
@@ -348,9 +394,8 @@ async function processCallback(params: {
     ok: true,
     title: 'Payment Confirmed',
     message: 'Your payment has been verified and access has been granted.',
-    actionLabel: 'Go to Course',
-    actionHref:
-      'https://www.seersapp.com/academy/how-to-reduce-operating-cost-and-increase-productivity-profitability-without-hiring-more-people/',
+    actionLabel: 'Go to Masterclass',
+    actionHref: AWC_MASTERCLASS_URL,
   };
 }
 
