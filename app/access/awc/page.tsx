@@ -8,11 +8,26 @@ export const dynamic = 'force-dynamic';
 const FEATURE_KEY = 'ai_workshop';
 const MASTERCLASS_URL = 'https://www.seersapp.com/academy/awc-level-1/';
 
-export default async function AwcAccessPage() {
+type SearchParams = Promise<{
+  intent?: string;
+}>;
+
+export default async function AwcAccessPage({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
+  const params = await searchParams;
+  const intentId = params.intent;
+
   const { userId } = await auth();
 
   if (!userId) {
-    redirect('/sign-in?redirect_url=/access/awc');
+    const redirectTarget = intentId
+      ? `/access/awc?intent=${encodeURIComponent(intentId)}`
+      : '/access/awc';
+
+    redirect(`/sign-in?redirect_url=${encodeURIComponent(redirectTarget)}`);
   }
 
   let userRows = await sql`
@@ -38,7 +53,11 @@ export default async function AwcAccessPage() {
       'Seers User';
 
     if (!email) {
-      redirect('/sign-in?redirect_url=/access/awc');
+      const redirectTarget = intentId
+        ? `/access/awc?intent=${encodeURIComponent(intentId)}`
+        : '/access/awc';
+
+      redirect(`/sign-in?redirect_url=${encodeURIComponent(redirectTarget)}`);
     }
 
     const insertedRows = await sql`
@@ -87,6 +106,10 @@ export default async function AwcAccessPage() {
     });
 
     redirect(loginLink);
+  }
+
+  if (intentId) {
+    redirect(`/payments?intent=${encodeURIComponent(intentId)}`);
   }
 
   redirect('/payments?product=awc');
