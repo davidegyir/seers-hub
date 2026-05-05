@@ -1,7 +1,6 @@
 'use client';
 
 import { SignUp } from '@clerk/nextjs';
-import type { CSSProperties } from 'react';
 import { useSearchParams } from 'next/navigation';
 
 export default function Page() {
@@ -9,117 +8,194 @@ export default function Page() {
   const redirectUrl = searchParams.get('redirect_url') || '/access/awc';
 
   return (
-    <main style={styles.main}>
-      <section style={styles.container}>
-        <div style={styles.left}>
-          <p style={styles.badge}>SEERS ACADEMY</p>
+    <>
+      <main className="auth-page">
+        <section className="auth-shell">
+          <div className="auth-copy">
+            <p className="auth-badge">SEERS ACADEMY</p>
 
-          <h1 style={styles.heading}>Create Your Masterclass Account</h1>
+            <h1>Create Your Masterclass Account</h1>
 
-          <p style={styles.subtext}>
-            Use the same email you entered earlier so your access can be
-            attached correctly.
-          </p>
-        </div>
+            <p>
+              Use the same email you entered earlier so your access can be
+              attached correctly.
+            </p>
+          </div>
 
-        <div style={styles.card}>
-          <SignUp
-            routing="path"
-            path="/sign-up"
-            signInUrl="/sign-in"
-            fallbackRedirectUrl={redirectUrl}
-            forceRedirectUrl={redirectUrl}
-            appearance={{
-              layout: {
-                logoPlacement: 'none',
-                showOptionalFields: false,
-              },
-              elements: {
-                rootBox: {
-                  width: '100%',
+          <div className="auth-card">
+            <SignUp
+              routing="path"
+              path="/sign-up"
+              signInUrl="/sign-in"
+              fallbackRedirectUrl={redirectUrl}
+              forceRedirectUrl={redirectUrl}
+              appearance={{
+                layout: {
+                  logoPlacement: 'none',
+                  showOptionalFields: false,
                 },
-                card: {
-                  width: '100%',
-                  boxShadow: 'none',
-                  border: 'none',
-                  borderRadius: '16px',
+                elements: {
+                  rootBox: {
+                    width: '100%',
+                  },
+                  card: {
+                    width: '100%',
+                    maxWidth: '100%',
+                    boxShadow: 'none',
+                    border: 'none',
+                    borderRadius: '16px',
+                  },
+                  formButtonPrimary: {
+                    backgroundColor: '#111827',
+                    color: 'white',
+                    boxShadow: 'none',
+                  },
+                  footerActionLink: {
+                    color: '#111827',
+                    fontWeight: 700,
+                  },
                 },
-                formButtonPrimary: {
-                  backgroundColor: '#111827',
-                  color: 'white',
-                  boxShadow: 'none',
+                variables: {
+                  colorPrimary: '#111827',
                 },
-                footerActionLink: {
-                  color: '#111827',
-                  fontWeight: 700,
-                },
-              },
-              variables: {
-                colorPrimary: '#111827',
-              },
-            }}
-          />
-        </div>
-      </section>
-    </main>
+              }}
+            />
+          </div>
+        </section>
+      </main>
+
+      <style jsx global>{`
+        html,
+        body {
+          margin: 0;
+          padding: 0;
+          overflow-x: hidden;
+        }
+
+        .auth-page {
+          min-height: 100vh;
+          min-height: 100dvh;
+          background: radial-gradient(
+            circle at top left,
+            #1e3a8a 0,
+            #0f172a 38%,
+            #020617 100%
+          );
+          color: white;
+          font-family: Arial, sans-serif;
+          padding: 48px 20px;
+          box-sizing: border-box;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .auth-shell {
+          width: 100%;
+          max-width: 1040px;
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) minmax(340px, 440px);
+          gap: 40px;
+          align-items: center;
+        }
+
+        .auth-copy {
+          max-width: 560px;
+        }
+
+        .auth-badge {
+          color: #facc15;
+          font-weight: 700;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          margin: 0 0 12px;
+        }
+
+        .auth-copy h1 {
+          font-size: clamp(2.2rem, 5vw, 4rem);
+          line-height: 1.05;
+          margin: 0 0 18px;
+          font-weight: 400;
+        }
+
+        .auth-copy p {
+          color: #cbd5e1;
+          font-size: 1.08rem;
+          line-height: 1.7;
+          margin: 0;
+        }
+
+        .auth-card {
+          width: 100%;
+          max-width: 440px;
+          background: rgba(255, 255, 255, 0.98);
+          border-radius: 22px;
+          padding: 16px;
+          box-shadow: 0 24px 70px rgba(0, 0, 0, 0.32);
+          box-sizing: border-box;
+        }
+
+        @media (max-width: 760px) {
+          .auth-page {
+            padding: 64px 16px 32px;
+            align-items: flex-start;
+          }
+
+          .auth-shell {
+            display: flex;
+            flex-direction: column;
+            gap: 28px;
+          }
+
+          .auth-copy {
+            width: 100%;
+            max-width: none;
+          }
+
+          .auth-badge {
+            font-size: 0.85rem;
+            margin-bottom: 10px;
+          }
+
+          .auth-copy h1 {
+            font-size: 2.35rem;
+            line-height: 1.08;
+            margin-bottom: 14px;
+          }
+
+          .auth-copy p {
+            font-size: 1rem;
+            line-height: 1.55;
+          }
+
+          .auth-card {
+            width: 100%;
+            max-width: 100%;
+            border-radius: 20px;
+            padding: 10px;
+          }
+
+          .cl-card {
+            width: 100% !important;
+            max-width: 100% !important;
+          }
+        }
+
+        @media (max-width: 420px) {
+          .auth-page {
+            padding: 56px 12px 24px;
+          }
+
+          .auth-copy h1 {
+            font-size: 2rem;
+          }
+
+          .auth-card {
+            padding: 8px;
+            border-radius: 18px;
+          }
+        }
+      `}</style>
+    </>
   );
 }
-
-const styles: Record<string, CSSProperties> = {
-  main: {
-    minHeight: '100vh',
-    background:
-      'radial-gradient(circle at top left, #1e3a8a 0, #0f172a 38%, #020617 100%)',
-    color: 'white',
-    fontFamily: 'Arial, sans-serif',
-    padding: '1.5rem',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  container: {
-    width: '100%',
-    maxWidth: 1040,
-    display: 'grid',
-    gap: '2rem',
-    alignItems: 'center',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-  },
-
-  left: {
-    textAlign: 'left',
-  },
-
-  badge: {
-    color: '#facc15',
-    fontWeight: 700,
-    letterSpacing: '0.08em',
-    textTransform: 'uppercase',
-    marginBottom: '0.75rem',
-  },
-
-  heading: {
-    fontSize: 'clamp(1.8rem, 5vw, 3.2rem)',
-    lineHeight: 1.1,
-    margin: '0 0 1rem',
-  },
-
-  subtext: {
-    color: '#cbd5e1',
-    fontSize: '1rem',
-    lineHeight: 1.6,
-    maxWidth: 560,
-  },
-
-  card: {
-    background: 'rgba(255,255,255,0.98)',
-    borderRadius: 18,
-    padding: '1rem',
-    boxShadow: '0 20px 60px rgba(0,0,0,0.35)',
-    minHeight: 380,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-};
