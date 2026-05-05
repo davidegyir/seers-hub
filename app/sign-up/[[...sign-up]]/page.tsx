@@ -1,6 +1,7 @@
 'use client';
 
 import { SignUp } from '@clerk/nextjs';
+import type { CSSProperties } from 'react';
 import { useSearchParams } from 'next/navigation';
 
 export default function Page() {
@@ -10,13 +11,10 @@ export default function Page() {
   return (
     <main style={styles.main}>
       <section style={styles.container}>
-        {/* LEFT PANEL */}
         <div style={styles.left}>
           <p style={styles.badge}>SEERS ACADEMY</p>
 
-          <h1 style={styles.heading}>
-            Create Your Masterclass Account
-          </h1>
+          <h1 style={styles.heading}>Create Your Masterclass Account</h1>
 
           <p style={styles.subtext}>
             Use the same email you entered earlier so your access can be
@@ -24,7 +22,6 @@ export default function Page() {
           </p>
         </div>
 
-        {/* RIGHT PANEL */}
         <div style={styles.card}>
           <SignUp
             routing="path"
@@ -38,7 +35,9 @@ export default function Page() {
                 showOptionalFields: false,
               },
               elements: {
-                rootBox: { width: '100%' },
+                rootBox: {
+                  width: '100%',
+                },
                 card: {
                   width: '100%',
                   boxShadow: 'none',
@@ -48,6 +47,11 @@ export default function Page() {
                 formButtonPrimary: {
                   backgroundColor: '#111827',
                   color: 'white',
+                  boxShadow: 'none',
+                },
+                footerActionLink: {
+                  color: '#111827',
+                  fontWeight: 700,
                 },
               },
               variables: {
@@ -61,12 +65,13 @@ export default function Page() {
   );
 }
 
-const styles = {
+const styles: Record<string, CSSProperties> = {
   main: {
     minHeight: '100vh',
     background:
       'radial-gradient(circle at top left, #1e3a8a 0, #0f172a 38%, #020617 100%)',
     color: 'white',
+    fontFamily: 'Arial, sans-serif',
     padding: '1.5rem',
     display: 'flex',
     alignItems: 'center',
@@ -79,10 +84,7 @@ const styles = {
     display: 'grid',
     gap: '2rem',
     alignItems: 'center',
-
-    // 🔥 Responsive layout
-    gridTemplateColumns:
-      'repeat(auto-fit, minmax(300px, 1fr))',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
   },
 
   left: {
@@ -100,13 +102,14 @@ const styles = {
   heading: {
     fontSize: 'clamp(1.8rem, 5vw, 3.2rem)',
     lineHeight: 1.1,
-    marginBottom: '1rem',
+    margin: '0 0 1rem',
   },
 
   subtext: {
     color: '#cbd5e1',
     fontSize: '1rem',
     lineHeight: 1.6,
+    maxWidth: 560,
   },
 
   card: {
