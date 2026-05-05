@@ -3,10 +3,12 @@ import { sql } from '@/lib/db';
 import { verifyFlutterwaveTransaction } from '@/lib/flutterwave';
 import { applyProductAccess } from '@/lib/product-access';
 import { enrollUserInLearnDash } from '@/lib/learndash-bridge';
+import { createWordPressLoginLink } from '@/lib/wp-login-token';
 
 export const dynamic = 'force-dynamic';
 
-const AWC_MASTERCLASS_URL = 'https://www.seersapp.com/academy/awc-level-1/';
+const FALLBACK_AWC_MASTERCLASS_URL =
+  'https://www.seersapp.com/academy/awc-level-1/';
 
 const SAFE_AUTO_APPROVE_METHODS = new Set([
   'card',
@@ -74,6 +76,32 @@ async function verifyFlutterwaveTransactionWithTimeout(transactionId: string) {
       )
     ),
   ]);
+}
+
+async function createMasterclassAccessLink(userId: string) {
+  try {
+    const userRows = await sql`
+      SELECT email
+      FROM users
+      WHERE id = ${userId}
+      LIMIT 1
+    `;
+
+    const user = userRows[0];
+
+    if (!user?.email) {
+      return FALLBACK_AWC_MASTERCLASS_URL;
+    }
+
+    return await createWordPressLoginLink({
+      userId,
+      email: user.email,
+      courseUrl: FALLBACK_AWC_MASTERCLASS_URL,
+    });
+  } catch (error) {
+    console.error('Could not create WordPress login link:', error);
+    return FALLBACK_AWC_MASTERCLASS_URL;
+  }
 }
 
 async function tryEnrollAwcUser(params: {
@@ -220,12 +248,14 @@ async function processCallback(params: {
   }
 
   if (order.status === 'paid') {
+    const accessLink = await createMasterclassAccessLink(order.user_id);
+
     return {
       ok: true,
       title: 'Payment Already Confirmed',
       message: 'Your payment has already been verified and access granted.',
       actionLabel: 'Go to Masterclass',
-      actionHref: AWC_MASTERCLASS_URL,
+      actionHref: accessLink,
     };
   }
 
@@ -390,12 +420,14 @@ async function processCallback(params: {
     `;
   }
 
+  const accessLink = await createMasterclassAccessLink(order.user_id);
+
   return {
     ok: true,
     title: 'Payment Confirmed',
     message: 'Your payment has been verified and access has been granted.',
     actionLabel: 'Go to Masterclass',
-    actionHref: AWC_MASTERCLASS_URL,
+    actionHref: accessLink,
   };
 }
 
