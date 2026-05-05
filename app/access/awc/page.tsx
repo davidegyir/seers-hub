@@ -5,7 +5,7 @@ import { createWordPressLoginLink } from '@/lib/wp-login-token';
 
 export const dynamic = 'force-dynamic';
 
-const PRODUCT_KEY = 'awc';
+const FEATURE_KEY = 'ai_workshop';
 const MASTERCLASS_URL = 'https://www.seersapp.com/academy/awc-level-1/';
 
 export default async function AwcAccessPage() {
@@ -32,17 +32,17 @@ export default async function AwcAccessPage() {
     redirect('/suspended');
   }
 
-  const accessRows = await sql`
-    SELECT entitlements.id
+  // ✅ CORRECT entitlement check
+  const entitlementRows = await sql`
+    SELECT id
     FROM entitlements
-    INNER JOIN products ON entitlements.product_id = products.id
-    WHERE entitlements.user_id = ${user.id}
-      AND products.product_key = ${PRODUCT_KEY}
-      AND entitlements.status = 'active'
+    WHERE user_id = ${user.id}
+      AND feature_key = ${FEATURE_KEY}
+      AND granted = true
     LIMIT 1
   `;
 
-  const hasAccess = accessRows.length > 0;
+  const hasAccess = entitlementRows.length > 0;
 
   if (hasAccess) {
     const loginLink = await createWordPressLoginLink({
@@ -54,5 +54,6 @@ export default async function AwcAccessPage() {
     redirect(loginLink);
   }
 
+  // Not paid → go to payment
   redirect('/payments?product=awc');
 }
