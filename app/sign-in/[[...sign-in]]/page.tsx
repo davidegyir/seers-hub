@@ -44,9 +44,7 @@ export default function Page() {
       }
 
       const timeout = setTimeout(() => {
-        if (!cancelled) {
-          setReady(true);
-        }
+        if (!cancelled) setReady(true);
       }, 3000);
 
       try {
@@ -60,13 +58,10 @@ export default function Page() {
           setEmail(data.intent.email);
         }
       } catch (error) {
-        console.error('Could not load checkout intent email:', error);
+        console.error(error);
       } finally {
         clearTimeout(timeout);
-
-        if (!cancelled) {
-          setReady(true);
-        }
+        if (!cancelled) setReady(true);
       }
     }
 
@@ -78,102 +73,37 @@ export default function Page() {
   }, [intentId, directEmail]);
 
   return (
-    <main
-      style={{
-        minHeight: '100vh',
-        background:
-          'radial-gradient(circle at top left, #1e3a8a 0, #0f172a 38%, #020617 100%)',
-        color: 'white',
-        fontFamily: 'Arial, sans-serif',
-        padding: '2rem',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
-    >
-      <section
-        style={{
-          width: '100%',
-          maxWidth: 1040,
-          display: 'grid',
-          gridTemplateColumns: 'minmax(0, 1fr) minmax(360px, 440px)',
-          gap: '2rem',
-          alignItems: 'center',
-        }}
-      >
-        <div>
-          <p
-            style={{
-              color: '#facc15',
-              fontWeight: 700,
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              marginBottom: '0.75rem',
-            }}
-          >
-            SEERS ACADEMY
-          </p>
+    <main style={styles.main}>
+      <section style={styles.container}>
+        {/* LEFT PANEL */}
+        <div style={styles.left}>
+          <p style={styles.badge}>SEERS ACADEMY</p>
 
-          <h1
-            style={{
-              fontSize: 'clamp(2rem, 5vw, 4rem)',
-              lineHeight: 1.05,
-              margin: '0 0 1rem',
-            }}
-          >
+          <h1 style={styles.heading}>
             Create Your Masterclass Access
           </h1>
 
-          <p
-            style={{
-              color: '#cbd5e1',
-              fontSize: '1.08rem',
-              lineHeight: 1.7,
-              maxWidth: 560,
-            }}
-          >
+          <p style={styles.subtext}>
             {email
               ? 'Your email has been prepared. Please continue securely.'
               : 'Please sign in to continue.'}
           </p>
         </div>
 
-        <div
-          style={{
-            background: 'rgba(255,255,255,0.98)',
-            borderRadius: 22,
-            padding: '1.25rem',
-            boxShadow: '0 24px 70px rgba(0,0,0,0.32)',
-            minHeight: 420,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
+        {/* RIGHT PANEL */}
+        <div style={styles.card}>
           {!ready ? (
-            <div
-              style={{
-                color: '#111827',
-                textAlign: 'center',
-                fontWeight: 700,
-              }}
-            >
-              Preparing your sign-in...
-            </div>
+            <div style={styles.loading}>Preparing your sign-in...</div>
           ) : (
             <SignIn
-              key={email || 'manual-sign-in'}
+              key={email || 'manual'}
               routing="path"
               path="/sign-in"
               signUpUrl="/sign-up"
               fallbackRedirectUrl={redirectUrl}
               forceRedirectUrl={redirectUrl}
               initialValues={
-                email
-                  ? {
-                      emailAddress: email,
-                    }
-                  : undefined
+                email ? { emailAddress: email } : undefined
               }
               appearance={{
                 layout: {
@@ -181,9 +111,7 @@ export default function Page() {
                   showOptionalFields: false,
                 },
                 elements: {
-                  rootBox: {
-                    width: '100%',
-                  },
+                  rootBox: { width: '100%' },
                   card: {
                     width: '100%',
                     boxShadow: 'none',
@@ -193,11 +121,6 @@ export default function Page() {
                   formButtonPrimary: {
                     backgroundColor: '#111827',
                     color: 'white',
-                    boxShadow: 'none',
-                  },
-                  footerActionLink: {
-                    color: '#111827',
-                    fontWeight: 700,
                   },
                 },
                 variables: {
@@ -211,3 +134,69 @@ export default function Page() {
     </main>
   );
 }
+
+const styles = {
+  main: {
+    minHeight: '100vh',
+    background:
+      'radial-gradient(circle at top left, #1e3a8a 0, #0f172a 38%, #020617 100%)',
+    color: 'white',
+    padding: '1.5rem',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  container: {
+    width: '100%',
+    maxWidth: 1040,
+    display: 'grid',
+    gap: '2rem',
+    alignItems: 'center',
+
+    // 🔥 RESPONSIVE SWITCH
+    gridTemplateColumns:
+      'repeat(auto-fit, minmax(300px, 1fr))',
+  },
+
+  left: {
+    textAlign: 'left',
+  },
+
+  badge: {
+    color: '#facc15',
+    fontWeight: 700,
+    letterSpacing: '0.08em',
+    textTransform: 'uppercase',
+    marginBottom: '0.75rem',
+  },
+
+  heading: {
+    fontSize: 'clamp(1.8rem, 5vw, 3.2rem)',
+    lineHeight: 1.1,
+    marginBottom: '1rem',
+  },
+
+  subtext: {
+    color: '#cbd5e1',
+    fontSize: '1rem',
+    lineHeight: 1.6,
+  },
+
+  card: {
+    background: 'rgba(255,255,255,0.98)',
+    borderRadius: 18,
+    padding: '1rem',
+    boxShadow: '0 20px 60px rgba(0,0,0,0.35)',
+    minHeight: 380,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  loading: {
+    color: '#111827',
+    fontWeight: 600,
+    textAlign: 'center',
+  },
+};
