@@ -24,7 +24,7 @@ export default function Page() {
   const searchParams = useSearchParams();
 
   const directEmail = searchParams.get('email') || undefined;
-  const redirectUrl = searchParams.get('redirect_url') || '/payments?product=awc';
+  const redirectUrl = searchParams.get('redirect_url') || '/access/awc';
 
   const intentId = useMemo(
     () => extractIntentFromRedirectUrl(redirectUrl),
@@ -32,27 +32,49 @@ export default function Page() {
   );
 
   const [email, setEmail] = useState<string | undefined>(directEmail);
-  const [isLoadingIntent, setIsLoadingIntent] = useState(Boolean(intentId && !directEmail));
+  const [ready, setReady] = useState(!intentId || Boolean(directEmail));
 
   useEffect(() => {
+    let cancelled = false;
+
     async function loadIntentEmail() {
-      if (!intentId || directEmail) return;
+      if (!intentId || directEmail) {
+        setReady(true);
+        return;
+      }
+
+      const timeout = setTimeout(() => {
+        if (!cancelled) {
+          setReady(true);
+        }
+      }, 3000);
 
       try {
-        const response = await fetch(`/api/checkout-intent/${intentId}`);
+        const response = await fetch(`/api/checkout-intent/${intentId}`, {
+          cache: 'no-store',
+        });
+
         const data = await response.json();
 
-        if (data.success && data.intent?.email) {
+        if (!cancelled && data.success && data.intent?.email) {
           setEmail(data.intent.email);
         }
       } catch (error) {
         console.error('Could not load checkout intent email:', error);
       } finally {
-        setIsLoadingIntent(false);
+        clearTimeout(timeout);
+
+        if (!cancelled) {
+          setReady(true);
+        }
       }
     }
 
     loadIntentEmail();
+
+    return () => {
+      cancelled = true;
+    };
   }, [intentId, directEmail]);
 
   return (
@@ -110,7 +132,9 @@ export default function Page() {
               maxWidth: 560,
             }}
           >
-            Use the same email you entered earlier.
+            {email
+              ? 'Your email has been prepared. Please continue securely.'
+              : 'Please sign in to continue.'}
           </p>
         </div>
 
@@ -120,31 +144,37 @@ export default function Page() {
             borderRadius: 22,
             padding: '1.25rem',
             boxShadow: '0 24px 70px rgba(0,0,0,0.32)',
+            minHeight: 420,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
           }}
         >
-          {isLoadingIntent ? (
+          {!ready ? (
             <div
               style={{
-                background: 'white',
                 color: '#111827',
-                borderRadius: 16,
-                padding: '2rem',
                 textAlign: 'center',
+                fontWeight: 700,
               }}
             >
               Preparing your sign-in...
             </div>
           ) : (
             <SignIn
-              key={email || 'no-email'}
+              key={email || 'manual-sign-in'}
               routing="path"
               path="/sign-in"
               signUpUrl="/sign-up"
               fallbackRedirectUrl={redirectUrl}
               forceRedirectUrl={redirectUrl}
-              initialValues={{
-                emailAddress: email,
-              }}
+              initialValues={
+                email
+                  ? {
+                      emailAddress: email,
+                    }
+                  : undefined
+              }
               appearance={{
                 layout: {
                   logoPlacement: 'none',
@@ -159,13 +189,6 @@ export default function Page() {
                     boxShadow: 'none',
                     border: 'none',
                     borderRadius: '16px',
-                  },
-                  headerTitle: {
-                    fontSize: '1.25rem',
-                    color: '#111827',
-                  },
-                  headerSubtitle: {
-                    color: '#6b7280',
                   },
                   formButtonPrimary: {
                     backgroundColor: '#111827',
