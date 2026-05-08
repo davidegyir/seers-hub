@@ -79,12 +79,12 @@ export default function Page() {
           <div className="auth-copy">
             <p className="auth-badge">SEERS ACADEMY</p>
 
-            <h1>Create Your Masterclass Access</h1>
+            <h1>Continue to Your Masterclass</h1>
 
             <p>
               {email
                 ? 'Your email has been prepared. Please continue securely.'
-                : 'Please sign in to continue.'}
+                : 'Sign in to continue securely.'}
             </p>
           </div>
 
