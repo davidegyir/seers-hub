@@ -6,7 +6,7 @@ import { createWordPressLoginLink } from '@/lib/wp-login-token';
 export const dynamic = 'force-dynamic';
 
 const FEATURE_KEY = 'ai_workshop';
-const MASTERCLASS_URL = 'https://www.seersapp.com/academy/awc-level-1/';
+const MASTERCLASS_URL = 'https://www.seersapp.com/academy/awc-level-1/lessons/reduce-operating-cost-increase-productivity-profitability-without-hiring-more-people-video/';
 
 type SearchParams = Promise<{
   intent?: string;
