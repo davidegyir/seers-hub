@@ -41,9 +41,9 @@ export async function POST(req: Request) {
 
     const { name, mobile, email, product, source } = body;
 
-    if (!email || !product) {
+    if (!name || !mobile || !product) {
       return NextResponse.json(
-        { error: "Missing email or product" },
+        { error: "Missing name, mobile, or product" },
         {
           status: 400,
           headers: getCorsHeaders(origin),
@@ -67,9 +67,9 @@ export async function POST(req: Request) {
       RETURNING id
       `,
       [
-        name || null,
-        mobile || null,
-        email,
+        name,
+        mobile,
+        email || null,
         product,
         source || null,
         expiresAt,
