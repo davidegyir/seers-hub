@@ -6,7 +6,8 @@ import { createWordPressLoginLink } from '@/lib/wp-login-token';
 export const dynamic = 'force-dynamic';
 
 const FEATURE_KEY = 'ai_workshop';
-const MASTERCLASS_URL = 'https://www.seersapp.com/academy/awc-level-1/lessons/reduce-operating-cost-increase-productivity-profitability-without-hiring-more-people-video/';
+const FIRST_LESSON_URL =
+  'https://www.seersapp.com/academy/awc-level-one/lessons/reduce-operating-cost-increase-productivity-profitability-without-hiring-more-people-video/';
 
 type SearchParams = Promise<{
   intent?: string;
@@ -102,13 +103,22 @@ export default async function AwcAccessPage({
     const loginLink = await createWordPressLoginLink({
       userId: user.id,
       email: user.email,
-      courseUrl: MASTERCLASS_URL,
+      courseUrl: FIRST_LESSON_URL,
     });
 
     redirect(loginLink);
   }
 
   if (intentId) {
+    await sql`
+      UPDATE checkout_intents
+      SET
+        clerk_user_id = ${userId},
+        email = COALESCE(email, ${user.email}),
+        updated_at = NOW()
+      WHERE id = ${intentId}
+    `;
+
     redirect(`/payments?intent=${encodeURIComponent(intentId)}`);
   }
 
