@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import { sql } from '@/lib/db';
 
-const WP_MASTERCLASS_URL = 'https://www.seersapp.com/academy/awc-level-1/lessons/reduce-operating-cost-increase-productivity-profitability-without-hiring-more-people-video/';
+const WP_MASTERCLASS_URL = 'https://www.seersapp.com/academy/awc-level-one/lessons/reduce-operating-cost-increase-productivity-profitability-without-hiring-more-people-video/';
 
 function hashToken(token: string) {
   return crypto.createHash('sha256').update(token).digest('hex');

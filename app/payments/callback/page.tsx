@@ -8,7 +8,7 @@ import { createWordPressLoginLink } from '@/lib/wp-login-token';
 export const dynamic = 'force-dynamic';
 
 const FALLBACK_AWC_MASTERCLASS_URL =
-  'https://www.seersapp.com/academy/awc-level-1/lessons/reduce-operating-cost-increase-productivity-profitability-without-hiring-more-people-video/';
+  'https://www.seersapp.com/academy/awc-level-one/lessons/reduce-operating-cost-increase-productivity-profitability-without-hiring-more-people-video/';
 
 const SAFE_AUTO_APPROVE_METHODS = new Set([
   'card',
