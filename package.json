@@ -10,7 +10,9 @@
   },
   "dependencies": {
     "@clerk/nextjs": "^7.0.12",
+    "@neondatabase/serverless": "^1.1.0",
     "dotenv": "^17.4.2",
+    "flutterwave-node-v3": "^1.3.2",
     "next": "16.2.3",
     "pg": "^8.20.0",
     "postgres": "^3.4.9",
