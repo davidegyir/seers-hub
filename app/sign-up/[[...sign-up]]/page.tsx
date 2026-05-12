@@ -17,8 +17,7 @@ export default function Page() {
             <h1>Create Your Masterclass Account</h1>
 
             <p>
-              Use the same email you entered earlier so your access can be
-              attached correctly.
+              Sign in securely to continue your Masterclass enrollment.
             </p>
           </div>
 

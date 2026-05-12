@@ -98,6 +98,9 @@ export async function startCheckout(formData: FormData) {
     }
   }
 
+  const customerEmail = checkoutIntent?.email || user.email;
+  const customerName = user.full_name || checkoutIntent?.email || user.email;
+
   const orderRows = await sql`
     INSERT INTO orders (
       user_id,
@@ -109,6 +112,8 @@ export async function startCheckout(formData: FormData) {
       final_amount,
       currency,
       discount_code,
+      customer_email,
+      customer_name,
       created_at,
       updated_at
     )
@@ -122,6 +127,8 @@ export async function startCheckout(formData: FormData) {
       ${finalAmount},
       ${product.currency},
       ${discountCode},
+      ${customerEmail},
+      ${customerName},
       NOW(),
       NOW()
     )
@@ -163,8 +170,8 @@ export async function startCheckout(formData: FormData) {
     amount: finalAmount,
     currency: product.currency,
     txRef,
-    email: checkoutIntent?.email || user.email,
-    name: user.full_name,
+    email: customerEmail,
+    name: customerName,
     title: product.name,
     description: product.description,
   });
