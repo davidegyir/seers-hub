@@ -167,10 +167,74 @@ async function tryEnrollAwcUser(params: {
   `;
 }
 
+async function getOrderByTxRef(txRef: string) {
+  const orderRows = await sql`
+    SELECT
+      orders.id,
+      orders.user_id,
+      orders.product_id,
+      orders.status,
+      orders.payment_reference,
+      orders.flutterwave_tx_id,
+      orders.original_amount,
+      orders.discount_amount,
+      orders.final_amount,
+      orders.currency AS order_currency,
+      products.product_key,
+      products.price,
+      products.currency AS product_currency
+    FROM orders
+    INNER JOIN products ON orders.product_id = products.id
+    WHERE orders.payment_reference = ${txRef}
+    LIMIT 1
+  `;
+
+  return orderRows[0];
+}
+
 async function processCallback(params: {
   transactionId?: string;
   txRefFromUrl?: string;
+  statusFromUrl?: string;
 }) {
+  const txRefFromUrl = params.txRefFromUrl;
+
+  if (!params.transactionId && txRefFromUrl) {
+    const order = await getOrderByTxRef(txRefFromUrl);
+
+    if (!order) {
+      return {
+        ok: false,
+        title: 'Order Not Found',
+        message:
+          'The payment reference was received, but no matching order was found.',
+        actionLabel: 'Return to Payment',
+        actionHref: '/payments?product=awc',
+      };
+    }
+
+    if (order.status === 'paid') {
+      const accessLink = await createMasterclassAccessLink(order.user_id);
+
+      return {
+        ok: true,
+        title: 'Access Confirmed',
+        message: 'Your access has been granted successfully.',
+        actionLabel: 'Go to Masterclass',
+        actionHref: accessLink,
+      };
+    }
+
+    return {
+      ok: false,
+      title: 'Payment Could Not Be Verified',
+      message:
+        'A payment reference was received, but no Flutterwave transaction reference was available for verification.',
+      actionLabel: 'Return to Payment',
+      actionHref: '/payments?product=awc',
+    };
+  }
+
   if (!params.transactionId) {
     return {
       ok: false,
@@ -217,24 +281,7 @@ async function processCallback(params: {
     };
   }
 
-  const orderRows = await sql`
-    SELECT
-      orders.id,
-      orders.user_id,
-      orders.product_id,
-      orders.status,
-      orders.payment_reference,
-      orders.flutterwave_tx_id,
-      products.product_key,
-      products.price,
-      products.currency
-    FROM orders
-    INNER JOIN products ON orders.product_id = products.id
-    WHERE orders.payment_reference = ${txRef}
-    LIMIT 1
-  `;
-
-  const order = orderRows[0];
+  const order = await getOrderByTxRef(txRef);
 
   if (!order) {
     return {
@@ -259,11 +306,12 @@ async function processCallback(params: {
     };
   }
 
-  const expectedAmount = Number(order.price);
+  const expectedAmount = Number(order.final_amount ?? order.price);
   const actualAmount = Number(verified.amount);
+  const expectedCurrency = order.order_currency || order.product_currency;
 
   const amountMatches = actualAmount === expectedAmount;
-  const currencyMatches = verified.currency === order.currency;
+  const currencyMatches = verified.currency === expectedCurrency;
   const txRefMatches = verified.tx_ref === order.payment_reference;
   const statusSuccessful = verified.status === 'successful';
 
@@ -319,7 +367,7 @@ async function processCallback(params: {
           chargeResponseCode,
           expectedAmount,
           actualAmount,
-          expectedCurrency: order.currency,
+          expectedCurrency,
           actualCurrency: verified.currency,
           txRefMatches,
           amountMatches,
@@ -441,6 +489,7 @@ export default async function PaymentCallbackPage({
   const result = await processCallback({
     transactionId: params.transaction_id,
     txRefFromUrl: params.tx_ref,
+    statusFromUrl: params.status,
   });
 
   return (
@@ -450,7 +499,8 @@ export default async function PaymentCallbackPage({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: '#f8fafc',
+        background:
+          'linear-gradient(135deg, #f8fafc 0%, #eef2ff 45%, #f8fafc 100%)',
         fontFamily: 'Arial, sans-serif',
         padding: '2rem',
       }}

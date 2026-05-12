@@ -38,7 +38,7 @@ export default async function PaymentsPage({
         ? `/payments?product=${encodeURIComponent(productKey)}`
         : '/payments';
 
-    redirect(`/sign-in?redirect_url=${encodeURIComponent(redirectTarget)}`);
+    redirect(`/sign-up?redirect_url=${encodeURIComponent(redirectTarget)}`);
   }
 
   const userRows = await sql`
@@ -51,7 +51,7 @@ export default async function PaymentsPage({
   const user = userRows[0];
 
   if (!user) {
-    redirect('/sign-in');
+    redirect('/sign-up');
   }
 
   if (user.status === 'suspended') {
@@ -79,7 +79,8 @@ export default async function PaymentsPage({
     if (!checkoutIntent) {
       intentError = 'Checkout intent not found.';
     } else if (new Date(checkoutIntent.expires_at) < new Date()) {
-      intentError = 'Checkout intent expired. Please start again from the registration page.';
+      intentError =
+        'Checkout intent expired. Please start again from the registration page.';
     } else {
       productKey = checkoutIntent.product_slug;
 
@@ -121,7 +122,8 @@ export default async function PaymentsPage({
         <h1 style={{ marginTop: 0, color: '#111827' }}>Payment</h1>
 
         <p style={{ color: '#4b5563', marginBottom: '1.5rem' }}>
-          Confirm your selection and continue to the available payment options.
+          Confirm your selection, apply a discount code if you have one, and
+          continue to the available payment options.
         </p>
 
         {checkoutIntent && !intentError ? (
@@ -242,9 +244,41 @@ export default async function PaymentsPage({
 
                 <form action={startCheckout}>
                   <input type="hidden" name="productId" value={product.id} />
+
                   {intentId ? (
-                    <input type="hidden" name="checkoutIntentId" value={intentId} />
+                    <input
+                      type="hidden"
+                      name="checkoutIntentId"
+                      value={intentId}
+                    />
                   ) : null}
+
+                  <div style={{ marginBottom: '1rem' }}>
+                    <label
+                      style={{
+                        display: 'block',
+                        marginBottom: '0.5rem',
+                        fontWeight: 600,
+                        color: '#374151',
+                      }}
+                    >
+                      Discount Code (Optional)
+                    </label>
+
+                    <input
+                      type="text"
+                      name="discountCode"
+                      placeholder="Enter coupon code"
+                      style={{
+                        width: '100%',
+                        padding: '0.8rem',
+                        borderRadius: '10px',
+                        border: '1px solid #d1d5db',
+                        fontSize: '1rem',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
 
                   <button
                     type="submit"

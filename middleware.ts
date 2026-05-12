@@ -9,6 +9,10 @@ const isPublicRoute = createRouteMatcher([
   '/api(.*)',
 ]);
 
+const shouldStartWithSignUp = createRouteMatcher([
+  '/payments(.*)',
+]);
+
 export default clerkMiddleware(async (auth, req) => {
   if (isPublicRoute(req)) {
     return;
@@ -17,20 +21,20 @@ export default clerkMiddleware(async (auth, req) => {
   const { userId } = await auth();
 
   if (!userId) {
-    const signInUrl = new URL('/sign-in', req.url);
+    const redirectPath = req.nextUrl.pathname + req.nextUrl.search;
 
-    const redirectPath =
-      req.nextUrl.pathname + req.nextUrl.search;
+    const authPath = shouldStartWithSignUp(req) ? '/sign-up' : '/sign-in';
+    const authUrl = new URL(authPath, req.url);
 
-    signInUrl.searchParams.set('redirect_url', redirectPath);
+    authUrl.searchParams.set('redirect_url', redirectPath);
 
     const email = req.nextUrl.searchParams.get('email');
 
     if (email) {
-      signInUrl.searchParams.set('email', email);
+      authUrl.searchParams.set('email', email);
     }
 
-    return NextResponse.redirect(signInUrl);
+    return NextResponse.redirect(authUrl);
   }
 });
 

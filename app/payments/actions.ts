@@ -4,16 +4,18 @@ import { auth } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
 import { sql } from '@/lib/db';
 import { createFlutterwaveCheckout } from '@/lib/flutterwave';
+import { applyProductAccess } from '@/lib/product-access';
 
 export async function startCheckout(formData: FormData) {
   const { userId } = await auth();
 
   if (!userId) {
-    redirect('/sign-in');
+    redirect('/sign-up');
   }
 
   const productId = formData.get('productId')?.toString();
   const checkoutIntentId = formData.get('checkoutIntentId')?.toString();
+  const discountCode = formData.get('discountCode')?.toString().trim() || null;
 
   if (!productId) {
     throw new Error('Missing product');
@@ -74,12 +76,39 @@ export async function startCheckout(formData: FormData) {
     }
   }
 
+  const originalAmount = Number(product.price);
+  let discountAmount = 0;
+  let finalAmount = originalAmount;
+
+  if (discountCode) {
+    const discountRows = await sql`
+      SELECT *
+      FROM validate_discount_code(
+        ${discountCode}::text,
+        ${product.product_key}::text,
+        ${originalAmount}::numeric
+      )
+    `;
+
+    const discount = discountRows[0];
+
+    if (discount?.valid) {
+      discountAmount = Number(discount.discount_amount || 0);
+      finalAmount = Number(discount.final_amount || originalAmount);
+    }
+  }
+
   const orderRows = await sql`
     INSERT INTO orders (
       user_id,
       product_id,
       checkout_intent_id,
       status,
+      original_amount,
+      discount_amount,
+      final_amount,
+      currency,
+      discount_code,
       created_at,
       updated_at
     )
@@ -87,7 +116,12 @@ export async function startCheckout(formData: FormData) {
       ${user.id},
       ${product.id},
       ${checkoutIntentId || null},
-      'pending',
+      ${finalAmount === 0 ? 'paid' : 'pending'},
+      ${originalAmount},
+      ${discountAmount},
+      ${finalAmount},
+      ${product.currency},
+      ${discountCode},
       NOW(),
       NOW()
     )
@@ -108,14 +142,25 @@ export async function startCheckout(formData: FormData) {
       UPDATE checkout_intents
       SET
         order_id = ${order.id},
-        status = 'checkout_started',
+        status = ${finalAmount === 0 ? 'completed' : 'checkout_started'},
         updated_at = NOW()
       WHERE id = ${checkoutIntentId}
     `;
   }
 
+  if (finalAmount === 0) {
+    await applyProductAccess({
+      actorUserId: null,
+      targetUserId: user.id,
+      productId: product.id,
+      reason: `free checkout discount=${discountCode || 'none'}; tx_ref=${txRef}`,
+    });
+
+    redirect(`/payments/callback?status=successful&tx_ref=${txRef}`);
+  }
+
   const checkoutLink = await createFlutterwaveCheckout({
-    amount: Number(product.price),
+    amount: finalAmount,
     currency: product.currency,
     txRef,
     email: checkoutIntent?.email || user.email,
