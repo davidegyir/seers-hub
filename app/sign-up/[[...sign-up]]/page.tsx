@@ -12,12 +12,12 @@ export default function Page() {
       <main className="auth-page">
         <section className="auth-shell">
           <div className="auth-copy">
-            <p className="auth-badge">SEERS ACADEMY</p>
+            <p className="auth-badge">SEERS HUB</p>
 
-            <h1>Create Your Masterclass Account</h1>
+            <h1>Create Your Access Account</h1>
 
             <p>
-              Sign in securely to continue your Masterclass enrollment.
+              Sign in securely to continue.
             </p>
           </div>
 

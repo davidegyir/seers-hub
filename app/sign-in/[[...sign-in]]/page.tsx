@@ -77,9 +77,9 @@ export default function Page() {
       <main className="auth-page">
         <section className="auth-shell">
           <div className="auth-copy">
-            <p className="auth-badge">SEERS ACADEMY</p>
+            <p className="auth-badge">SEERS HUB</p>
 
-            <h1>Continue to Your Masterclass</h1>
+            <h1>Continue to Your Account</h1>
 
             <p>
               {email
