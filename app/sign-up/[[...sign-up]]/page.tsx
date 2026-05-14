@@ -14,11 +14,13 @@ export default function Page() {
           <div className="auth-copy">
             <p className="auth-badge">SEERS HUB</p>
 
-            <h1>Create Your Access Account</h1>
+            <h1>
+              Welcome to
+              <br />
+              Seers Hub
+            </h1>
 
-            <p>
-              Sign in securely to continue.
-            </p>
+            <p>Create your secure Seers account.</p>
           </div>
 
           <div className="auth-card">
@@ -43,6 +45,18 @@ export default function Page() {
                     boxShadow: 'none',
                     border: 'none',
                     borderRadius: '16px',
+                  },
+                  headerTitle: {
+                    visibility: 'hidden',
+                    height: '0',
+                    margin: '0',
+                    padding: '0',
+                  },
+                  headerSubtitle: {
+                    visibility: 'hidden',
+                    height: '0',
+                    margin: '0',
+                    padding: '0',
                   },
                   formButtonPrimary: {
                     backgroundColor: '#111827',

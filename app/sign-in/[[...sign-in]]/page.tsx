@@ -79,12 +79,16 @@ export default function Page() {
           <div className="auth-copy">
             <p className="auth-badge">SEERS HUB</p>
 
-            <h1>Continue to Your Account</h1>
+             <h1>
+              Welcome to
+              <br />
+              Seers Hub
+             </h1>
 
             <p>
               {email
                 ? 'Your email has been prepared. Please continue securely.'
-                : 'Sign in to continue securely.'}
+                : 'Access your Seers account securely.'}
             </p>
           </div>
 
@@ -115,6 +119,18 @@ export default function Page() {
                       boxShadow: 'none',
                       border: 'none',
                       borderRadius: '16px',
+                    },
+                    headerTitle: {
+                      visibility: 'hidden',
+                      height: '0',
+                      margin: '0',
+                      padding: '0',
+                    },
+                    headerSubtitle: {
+                      visibility: 'hidden',
+                      height: '0',
+                      margin: '0',
+                      padding: '0',
                     },
                     formButtonPrimary: {
                       backgroundColor: '#111827',
